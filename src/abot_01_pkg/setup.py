@@ -22,10 +22,12 @@ setup(
    license='TODO',
    tests_require=['pytest'],
    entry_points={
-       'console_scripts': [
-           'fsm = abot_01_pkg.FSM:main',
-           'mode = abot_01_pkg.Mode:main',
-           'follow_ball_controller = abot_01_pkg.follow_ball_controller:main',
-       ],
+      'console_scripts': [
+          'fsm = abot_01_pkg.FSM:main',
+          'mode = abot_01_pkg.Mode:main',
+          'follow_ball_controller = abot_01_pkg.follow_ball_controller:main',
+          'filter = abot_01_pkg.filter:main',
+          'image_info = abot_01_pkg.image_info:main',
+      ],
    },
 )
