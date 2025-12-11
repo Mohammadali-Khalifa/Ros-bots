@@ -11,13 +11,13 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([
                 PathJoinSubstitution([
-                    FindPackageShare('moali_pkg'),
+                    FindPackageShare('abot_01_pkg'),
                     'move_square_launch.py'
                 ])
             ])
         ),
         Node(
-            package='moali_pkg',
+            package='abot_01_pkg',
             namespace='turtlesim1',
             executable='square_distance',
             name='distance'
