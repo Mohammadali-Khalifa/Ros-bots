@@ -10,13 +10,13 @@ def generate_launch_description():
             name='sim'
         ),
         Node(
-            package='moali_pkg',
+            package='abot_01_pkg',
             namespace='turtlesim1',
             executable='moves_square',
             name='mover'
         ),        
         Node(
-            package='moali_pkg',
+            package='abot_01_pkg',
             namespace='turtlesim1',
             executable='FSM',
             name='FSM'
