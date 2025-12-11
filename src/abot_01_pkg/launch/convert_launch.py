@@ -17,13 +17,13 @@ def generate_launch_description():
             ])
         ),
         Node(
-            package='moali_pkg',
+            package='abot_01_pkg',
             namespace='turtlesim1',
             executable='square_distance',
             name='distance'
         ),
         Node(
-            package='moali_pkg',
+            package='abot_01_pkg',
             namespace='turtlesim1',
             executable='convert',
             name='unit_convert',
