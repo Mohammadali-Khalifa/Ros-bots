@@ -23,22 +23,24 @@ class ColorFilter(Node):
        )
        self.get_logger().info('ColorFilter node started (target = BLUE)')
    def image_cb(self, msg: Image):
-       # Convert to OpenCV BGR8
-       frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
-       # Convert to HSV
-       hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-       # Simple blue thresholds (you can tweak later)
-       lower_blue = np.array([100, 120, 50])
-       upper_blue = np.array([140, 255, 255])
-       mask = cv2.inRange(hsv, lower_blue, upper_blue)
-       # Optional: a bit of cleanup
-       kernel = np.ones((5, 5), np.uint8)
-       mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-       mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-       # Publish mono8 mask
-       msg_out = self.bridge.cv2_to_imgmsg(mask, encoding='mono8')
-       msg_out.header = msg.header  # keep timestamps
-       self.pub_filtered.publish(msg_out)
+         # Convert to OpenCV BGR8
+         frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+          # Flips image 180
+         frame = cv2.flip(frame, -1)
+         # Convert to HSV
+         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+         # Simple blue thresholds (you can tweak later)
+         lower_blue = np.array([90, 80, 40])
+         upper_blue = np.array([140, 255, 255])
+         mask = cv2.inRange(hsv, lower_blue, upper_blue)
+         # Optional: a bit of cleanup
+         kernel = np.ones((5, 5), np.uint8)
+         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+         # Publish mono8 mask
+         msg_out = self.bridge.cv2_to_imgmsg(mask, encoding='mono8')
+         msg_out.header = msg.header  # keep timestamps
+         self.pub_filtered.publish(msg_out)
 def main(args=None):
    rclpy.init(args=args)
    node = ColorFilter()
