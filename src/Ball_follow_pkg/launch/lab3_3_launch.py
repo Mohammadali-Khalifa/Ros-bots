@@ -48,14 +48,14 @@ def generate_launch_description():
         ),
 
         Node(
-            package='lab3_3',
+            package='Ball_follow_pkg',
             executable='ball_follow_controller_node',
             name='ball_follow_controller_node',
             output='screen',
         ),
 
         Node(
-            package='lab3_3',
+            package='Ball_follow_pkg',
             executable='mode_switcher_node',
             name='mode_switcher_node',
             output='screen',
