@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'lab3_3'
+package_name = 'Ball_follow_pkg'
 
 setup(
     name=package_name,
@@ -25,9 +25,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mode_switcher_node = lab3_3.mode_switcher_node:main',
-            'mode_input_node = lab3_3.mode_input_node:main',
-            'ball_follow_controller_node = lab3_3.ball_follow_controller_node:main',
+            'mode_switcher_node = Ball_follow_pkg.mode_switcher_node:main',
+            'mode_input_node = Ball_follow_pkg.mode_input_node:main',
+            'ball_follow_controller_node = Ball_follow_pkg.ball_follow_controller_node:main',
         ],
     },
 )
