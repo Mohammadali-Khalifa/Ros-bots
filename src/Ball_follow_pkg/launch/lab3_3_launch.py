@@ -22,6 +22,7 @@ def generate_launch_description():
             description='Number of erode/dilate iterations',
         ),
 
+
         Node(
             package='lab3_1_color_filter',
             executable='color_filter_node',
@@ -31,6 +32,9 @@ def generate_launch_description():
                 'target_color': target_color,
                 'morph_iterations': morph_iterations,
             }],
+            remappings=[
+                ('image', '/camera/image_raw'),
+            ],
         ),
 
         Node(
