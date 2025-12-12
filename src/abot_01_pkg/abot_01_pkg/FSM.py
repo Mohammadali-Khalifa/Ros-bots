@@ -3,55 +3,18 @@ from rclpy.node import Node
 from std_msgs.msg import String, Bool
 from geometry_msgs.msg import Twist
 class FSMCode(Node):
-   """
-   Simple FSM with 3 modes:
-     - TELEOP: forward teleop Twist to robot
-     - AUTO:   forward autonomous Twist (from PID follow-ball node)
-     - ESTOP:  publish zero Twist
-   Modes are selected by a String on /mode: "t", "a", "e"
-   Optional estop Bool on /estop can force ESTOP when True.
-   """
+
    def __init__(self):
        super().__init__('abot_fsm')
        self.current_mode = 'TELEOP'
        self.estop_active = False
        self.teleop_cmd = Twist()
        self.auto_cmd = Twist()
-       # Teleop Twist (e.g. teleop_twist_keyboard remapped)
-       self.create_subscription(
-           Twist,
-           '/teleop/cmd_vel',
-           self.teleop_cb,
-           10
-       )
-       # Autonomous Twist from PID node
-       self.create_subscription(
-           Twist,
-           '/auto/cmd_vel',
-           self.auto_cb,
-           10
-       )
-       # Mode commands (single character)
-       self.create_subscription(
-           String,
-           '/mode',
-           self.mode_cb,
-           10
-       )
-       # Optional estop topic
-       self.create_subscription(
-           Bool,
-           '/estop',
-           self.estop_cb,
-           10
-       )
-       # This is what the hardware interface listens to
-       self.cmd_pub = self.create_publisher(
-           Twist,
-           '/abot/cmd_vel',
-           10
-       )
-       # 20 Hz update
+         self.create_subscription(Twist, 'teleop/cmd_vel', self.teleop_cb, 10)
+         self.create_subscription(Twist, 'auto/cmd_vel', self.auto_cb, 10)
+         self.create_subscription(String, 'mode', self.mode_cb, 10)
+         self.create_subscription(Bool, 'estop', self.estop_cb, 10)
+         self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
        self.timer = self.create_timer(0.05, self.update)
        self.get_logger().info('FSM node started in TELEOP mode')
    def teleop_cb(self, msg: Twist):
