@@ -8,19 +8,8 @@ class ColorFilter(Node):
    def __init__(self):
        super().__init__('color_filter')
        self.bridge = CvBridge()
-       # Subscribe to the camera image (with ROS_NAMESPACE set, this will be /abot-01/image_raw)
-       self.create_subscription(
-           Image,
-           'image_raw',
-           self.image_cb,
-           10
-       )
-       # Publish filtered mask (mono8)
-       self.pub_filtered = self.create_publisher(
-           Image,
-           'image_filtered',
-           10
-       )
+       self.sub = self.create_subscription(Image,'camera/image_raw', self.cb, 10)
+       self.pub = self.create_publisher(Image, 'image_filtered', 10)
        self.get_logger().info('ColorFilter node started (target = BLUE)')
    def image_cb(self, msg: Image):
          # Convert to OpenCV BGR8
