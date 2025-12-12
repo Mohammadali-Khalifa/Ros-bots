@@ -6,12 +6,10 @@ import time
 class FollowBallController(Node):
    def __init__(self):
        super().__init__('follow_ball_controller')
-       # Parameters (tune to taste)
        self.declare_parameter('frame_width', 640.0)
-       self.declare_parameter('target_width', 120.0)   # how big the ball should appear
+       self.declare_parameter('target_width', 120.0)
        self.declare_parameter('max_lin', 0.4)
        self.declare_parameter('max_ang', 1.2)
-       # PID gains (start with these, then adjust)
        self.declare_parameter('kp_ang', 0.004)
        self.declare_parameter('ki_ang', 0.0)
        self.declare_parameter('kd_ang', 0.0008)
@@ -28,7 +26,6 @@ class FollowBallController(Node):
        self.kp_lin = float(self.get_parameter('kp_lin').value)
        self.ki_lin = float(self.get_parameter('ki_lin').value)
        self.kd_lin = float(self.get_parameter('kd_lin').value)
-       # PID state
        self.prev_err_ang = 0.0
        self.int_err_ang = 0.0
        self.prev_err_lin = 0.0
@@ -40,7 +37,7 @@ class FollowBallController(Node):
            self.image_info_cb,
            10
        )
-       self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+       self.cmd_pub = self.create_publisher(Twist, 'auto/cmd_vel', 10)
        self.get_logger().info('FollowBallController started.')
    def image_info_cb(self, msg: Int32MultiArray):
        if len(msg.data) < 2:
