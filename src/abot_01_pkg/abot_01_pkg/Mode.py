@@ -4,7 +4,7 @@ from std_msgs.msg import String
 class Mode(Node):
    def __init__(self):
        super().__init__('mode_node')
-       self.pub = self.create_publisher(String, '/mode', 10)
+       self.pub = self.create_publisher(String, 'mode', 10)
        self.get_logger().info(
            'Mode node ready. Type: t=teleop, a=auto, e=estop, q=quit'
        )
