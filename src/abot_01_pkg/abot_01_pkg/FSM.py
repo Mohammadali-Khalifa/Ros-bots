@@ -5,12 +5,6 @@ from geometry_msgs.msg import Twist
 
 
 class FSMCode(Node):
-    """
-    Modes:
-      TELEOP: forward teleop/cmd_vel  -> abot/cmd_vel
-      AUTO:   forward auto/cmd_vel    -> abot/cmd_vel
-      ESTOP:  publish zeros
-    """
 
     def __init__(self):
         super().__init__('abot_fsm')
@@ -28,7 +22,7 @@ class FSMCode(Node):
         self.create_subscription(Bool, 'estop', self.estop_cb, 10)
 
         # PUBLISH to what the ABOT interface listens to
-        self.cmd_pub = self.create_publisher(Twist, 'abot/cmd_vel', 10)
+        self.cmd_pub = self.create_publisher(Twist, '/abot/cmd_vel', 10)
 
         # 20 Hz update
         self.timer = self.create_timer(0.05, self.update)
