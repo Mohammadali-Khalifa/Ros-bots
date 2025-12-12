@@ -4,15 +4,6 @@ from std_msgs.msg import Int32MultiArray
 from geometry_msgs.msg import Twist
 import time
 class FollowBallController(Node):
-   """
-   Uses TWO PID controllers:
-     - angular PID: keeps ball centered in the image
-     - linear  PID: keeps ball at a desired apparent width (distance)
-   Subscribes:
-     image_info  (Int32MultiArray: [center_px, object_width_px])
-   Publishes:
-     /auto/cmd_vel  (Twist)
-   """
    def __init__(self):
        super().__init__('follow_ball_controller')
        # Parameters (tune to taste)
@@ -49,7 +40,7 @@ class FollowBallController(Node):
            self.image_info_cb,
            10
        )
-       self.cmd_pub = self.create_publisher(Twist, '/auto/cmd_vel', 10)
+       self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
        self.get_logger().info('FollowBallController started.')
    def image_info_cb(self, msg: Int32MultiArray):
        if len(msg.data) < 2:
