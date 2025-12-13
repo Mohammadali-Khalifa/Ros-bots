@@ -10,7 +10,7 @@ class ImageInfo(Node):
     def __init__(self):
         super().__init__('image_info')  
 
-        self.sub = self.create_subscription(Image,'/image_filtered',self.image,10)  #subscribes to image_filtered which allowes us to get the data from the image
+        self.sub = self.create_subscription(Image,'image_filtered',self.image,10)  #subscribes to image_filtered which allowes us to get the data from the image
         self.pub = self.create_publisher(Int32MultiArray, 'image_info', 10) #publishes to image_info node which allows us to publish the infomation of the image 
         self.bridge = CvBridge() #convers ROS images to OpenCV
 
@@ -22,6 +22,13 @@ class ImageInfo(Node):
         contours, hierarchies = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         #lines 18 -22 basicly outline the image or shape (found on Open CV python)
         object_width = 0
+
+        if len(contours) == 0:
+            msg_out = Int32MultiArray()
+            msg_out.data = [0, 0]
+            self.pub.publish(msg_out)
+            print(f"offse from center=0, object width=0")
+            return
 
         shape = max(contours, key=cv2.contourArea)  
         x,y,w,h = cv2.boundingRect(shape)
