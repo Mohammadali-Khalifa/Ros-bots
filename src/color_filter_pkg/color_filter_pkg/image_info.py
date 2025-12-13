@@ -30,6 +30,9 @@ class ImageInfo(Node):
             msg_out = Int32MultiArray()
             msg_out.data = [0, 0]
             self.pub.publish(msg_out)
+            msg_ball = Float32MultiArray()
+            msg_ball.data = [float('nan'), 0.0]
+            self.pub_ball.publish(msg_ball)
             print(f"offse from center=0, object width=0")
             return
 
