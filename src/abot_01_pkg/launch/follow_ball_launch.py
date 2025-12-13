@@ -47,4 +47,10 @@ def generate_launch_description():
            name='mode',
            output='screen'
        ),
+      Node(
+          package='camera_ros',
+          executable='camera_node',
+          name='camera',
+          output='screen'
+      ),
    ])
