@@ -15,11 +15,13 @@ def generate_launch_description():
             default_value='blue',
             description="Color to filter: 'blue', 'pink', or 'orange'",
         ),
+        
         DeclareLaunchArgument(
             'morph_iterations',
             default_value='2',
             description='Number of erode/dilate iterations',
         ),
+
         Node(
             package='camera_ros',
             executable='camera_node',
@@ -27,7 +29,7 @@ def generate_launch_description():
             namespace=robot_ns,
             output='screen',
         ),
-        
+
         Node(
             package='color_filter_pkg',
             executable='filter',
