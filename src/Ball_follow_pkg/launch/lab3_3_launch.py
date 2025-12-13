@@ -27,30 +27,27 @@ def generate_launch_description():
             namespace=robot_ns,
             output='screen',
         ),
+        
         Node(
-            package='lab3_1_color_filter',
-            executable='color_filter_node',
-            name='color_filter_node',
+            package='color_filter_pkg',
+            executable='filter',
+            name='color_filter',
             namespace=robot_ns,
             output='screen',
             parameters=[{
                 'target_color': target_color,
-                'morph_iterations': morph_iterations,
+                'erode_dilate_iters': morph_iterations,
             }],
-            remappings=[
-                ('image', 'image_raw'),
-            ],
         ),
+
         Node(
-            package='lab3_1_color_filter',
-            executable='ball_measure_node',
-            name='ball_measure_node',
+            package='color_filter_pkg',
+            executable='image_info',
+            name='image_info',
             namespace=robot_ns,
             output='screen',
-            parameters=[{
-                'debug_ball': True,
-            }],
         ),
+
         Node(
             package='Ball_follow_pkg',
             executable='ball_follow_controller_node',
@@ -58,27 +55,31 @@ def generate_launch_description():
             namespace=robot_ns,
             output='screen',
         ),
+
         Node(
             package='Ball_follow_pkg',
             executable='mode_switcher_node',
             name='mode_switcher_node',
+            namespace=robot_ns,
             output='screen',
-            remappings=[
-                ('cmd_vel', '/abot/cmd_vel'),
-            ],
         ),
+
         Node(
             package='Ball_follow_pkg',
             executable='mode_input_node',
             name='mode_input_node',
+            namespace=robot_ns,
             output='screen',
         ),
+
         Node(
             package='simple_abot_interface',
             executable='simple_abot_interface',
             name='simple_abot_interface',
+            namespace=robot_ns,
             output='screen',
         ),
+
         Node(
             package='image_view',
             executable='image_view',
@@ -86,7 +87,7 @@ def generate_launch_description():
             namespace=robot_ns,
             output='screen',
             remappings=[
-                ('image', 'filtered_image'),
+                ('image', 'image_filtered'),
             ],
         ),
     ])
