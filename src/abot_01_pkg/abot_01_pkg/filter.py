@@ -2,55 +2,40 @@ import rclpy
 from rclpy.node import Node
 import cv2
 import numpy as np
-from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+
 class ColorFilter(Node):
     def __init__(self):
         super().__init__('color_filter')
         self.bridge = CvBridge()
+        self.sub = self.create_subscription(Image, 'camera/image_raw', self.filter, 10) #subscribes to image_filter used by color_filter
+        self.pub = self.create_publisher(Image, '/image_filtered', 10) #publishes to image_filter used by color_filter
 
-        # Subscribe to the raw camera feed (matches your topic list)
-        self.sub = self.create_subscription(
-            Image,
-            'camera/image_raw',
-            self.cb,
-            10
-        )
+    def filter(self, image_message): # convert ROS image to OpenCV
+        cv_image = self.bridge.imgmsg_to_cv2(image_message, desired_encoding='bgr8')
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, (95, 120, 60), (130, 255, 255))
+       
 
-        # Publish filtered image for debugging
-        self.pub = self.create_publisher(Image, 'image_filtered', 10)
+        #lines 18 to 29 basicly do the filtering and changing the HSV numbers of low and high can filter more or less (creates a bit mask for the color)
 
-        self.get_logger().info("ColorFilter node started (target = BLUE)")
+        
+        kernel = np.ones((7,7), np.uint8)
+        mask = cv2.erode(mask, kernel, iterations=1)
+        mask = cv2.dilate(mask, kernel, iterations=2)
+        result = cv2.bitwise_and(img, img, mask=mask)
+        ros_img = self.bridge.cv2_to_imgmsg(result, "mono8")
+        self.pub.publish(ros_img)
 
-    def cb(self, msg: Image):
-        # ROS Image -> OpenCV
-        img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        #lines 34 to 39 are form slides 24-25 of computer vision and then it publshes the images
 
-        # Convert to HSV and threshold blue
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-        # These ranges are a decent starting point for a blue ping pong ball
-        lower = np.array([90, 80, 50])
-        upper = np.array([140, 255, 255])
-
-        mask = cv2.inRange(hsv, lower, upper)
-
-        # Optional cleanup
-        mask = cv2.medianBlur(mask, 5)
-
-        # Convert mask to BGR so it displays nicely
-        filtered_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-
-        # OpenCV -> ROS Image
-        out_msg = self.bridge.cv2_to_imgmsg(filtered_bgr, encoding='bgr8')
-        out_msg.header = msg.header
-
-        self.pub.publish(out_msg)
-
-
-def main():
-    rclpy.init()
+def main(args=None):
+    rclpy.init(args=args)
     node = ColorFilter()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
+if __name__ == "__main__":
+    main()
