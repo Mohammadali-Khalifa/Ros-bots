@@ -27,10 +27,17 @@ class ColorFilter(Node):
         mask = cv2.erode(mask, kernel, iterations=1)
         mask = cv2.dilate(mask, kernel, iterations=2)
 
-        # publish the MASK (mono8). This is what image_info expects.
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        clean_mask = np.zeros_like(mask)
+        
+        if len(contours) > 0:
+            largest = max(contours, key=cv2.contourArea)
+            cv2.drawContours(clean_mask, [largest], -1, 255, -1)
+    
         ros_img = self.bridge.cv2_to_imgmsg(mask, "mono8")
         self.pub.publish(ros_img)
 
+        
         #lines 34 to 39 are form slides 24-25 of computer vision and then it publshes the images
 
 def main(args=None):
