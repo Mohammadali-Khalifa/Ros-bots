@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 from sensor_msgs.msg import Image
 from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Float32MultiArray
 from cv_bridge import CvBridge
+
 
 class ImageInfo(Node):
     def __init__(self):
@@ -13,6 +15,7 @@ class ImageInfo(Node):
         self.sub = self.create_subscription(Image,'image_filtered',self.image,10)  #subscribes to image_filtered which allowes us to get the data from the image
         self.pub = self.create_publisher(Int32MultiArray, 'image_info', 10) #publishes to image_info node which allows us to publish the infomation of the image 
         self.bridge = CvBridge() #convers ROS images to OpenCV
+        self.pub_ball = self.create_publisher(Float32MultiArray, 'ball_measurements', 10)
 
     def image(self, image_message):
         cv_image = self.bridge.imgmsg_to_cv2(image_message, desired_encoding='bgr8') #sets the image type back to openCV as 8 bit rgb (bgr8)
@@ -43,6 +46,11 @@ class ImageInfo(Node):
         self.pub.publish(msg_out)
 
         print(f"offse from center={offset}, object width={object_width}")
+
+        msg_ball = Float32MultiArray()
+        msg_ball.data = [float(center), float(object_width)]
+        self.pub_ball.publish(msg_ball)
+
 
 def main(args=None):
     rclpy.init(args=args)
