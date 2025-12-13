@@ -14,7 +14,9 @@ class ColorFilter(Node):
 
     def filter(self, image_message): # convert ROS image to OpenCV
         bgr = self.bridge.imgmsg_to_cv2(image_message, desired_encoding='bgr8')
+        bgr = cv2.rotate(bgr, cv2.ROTATE_180)
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+
         mask = cv2.inRange(hsv, (95, 120, 60), (130, 255, 255))
 
 
