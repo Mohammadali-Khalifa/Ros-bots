@@ -23,7 +23,7 @@ def generate_launch_description():
            parameters=[{
                'target_distance_m': 0.15,    
                'ball_diameter_m': 0.04,      
-               'focal_px': 600.0,
+               'focal_px': 650.0,
                'frame_width': 640.0,
                'max_lin': 0.4,
                'max_ang': 1.2,
