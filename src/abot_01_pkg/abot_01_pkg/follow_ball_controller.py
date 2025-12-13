@@ -123,12 +123,12 @@ class FollowBallControllerNode(Node):
         width_px = float(msg.data[1])
 
         # If ball not detected -> stop + reset
-        if isnan(center_px) or width_px <= 0.0:
+        if width_px <= 0.0 or center_px < 0.0:
             self.pid_ang.reset()
             self.pid_lin.reset()
             self.pub_cmd.publish(Twist())
             return
-
+            
         # --- Angular control (keep centered) ---
         half_w = self.frame_width / 2.0
         if half_w <= 0.0:
