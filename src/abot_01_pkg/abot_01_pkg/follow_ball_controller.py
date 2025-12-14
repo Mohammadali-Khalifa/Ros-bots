@@ -7,82 +7,56 @@ from geometry_msgs.msg import Twist
 class BallFollow(Node):
     def __init__(self):
         super().__init__('ball_follow_simple')
-        self.image_width = 640.0
-        self.desired_width = 200.0
-
-        self.k_ang = 1.6
-        self.k_lin = 0.004
-
-        self.max_ang = 2.0
-        self.max_lin = 0.8
-
-        self.center_deadband = 0.05
-        self.width_deadband_px = 30.0
-
-        self.min_turn = 0.40      
-        self.min_forward = 0.18   
-        self.turn_first = 0.25     
-
-        self.sub = self.create_subscription(Int32MultiArray, 'image_info', self.cb, 10)
-        self.pub = self.create_publisher(Twist, 'auto/cmd_vel', 10)
-        self.get_logger().info('ball_follow_simple started')
-
-    def clamp(self, x, lo, hi):
-        return max(lo, min(hi, x))
-
-    def cb(self, msg: Int32MultiArray):
-        t = Twist()
-
+        self.image_width = 640.0                  # camera image in pixels
+        self.target_width = 200.0                   #width of the ball
+        self.angular_gain = 1.6                # how much to turn left or right to see the ball
+        self.linear_gain = 0.004                # how much to go forward to the ball
+        self.center_deadband = 0.15            # for when the ball is centered
+        self.width_deadband_px = 30.0           #this is for moving forward and back
+        self.min_turn_speed = 0.50            # maintains steady speeds for turning
+        self.min_forward_speed = 0.30            #mianitans steady speeds for going forwards and back (reduces the jerking)
+        self.turn_first_threshold = 0.25         #how much the bot should be cenetred beofore it goes stright
+        
+        self.create_subscription(Int32MultiArray, 'image_info', self.image_callback, 10)  #subscibes to image_info to get the ball info
+        self.cmd_pub = self.create_publisher(Twist, 'auto/cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
+        
+    def image_callback(self, msg):
+        cmd = Twist()
         if len(msg.data) < 2:
-            self.pub.publish(t)
+            self.cmd_pub.publish(cmd)
             return
-
-        center_px = float(msg.data[0])
-        width_px  = float(msg.data[1])
-
-        # not detected
+            
+        center_px = float(msg.data[0])  #gets the center pos of the ball in pixels
+        width_px = float(msg.data[1])    #gets the width of the ball in pixels
+        
         if width_px <= 0.0 or center_px <= 0.0 or isnan(center_px):
-            self.pub.publish(t)
+            self.cmd_pub.publish(cmd)
             return
-
-        # ---- angular ----
-        half = self.image_width / 2.0
-        err_center = (center_px - half) / half   # -1..+1
-
-        if abs(err_center) > self.center_deadband:
-            w = -self.k_ang * err_center
-            w = self.clamp(w, -self.max_ang, self.max_ang)
-
-            # enforce minimum turn effort
-            if w > 0.0:
-                w = max(w, self.min_turn)
+                #lines 32-34 is for if the ball is not detetcted
+        
+        image_center = self.image_width / 2.0
+        center_error = (center_px - image_center) / image_center
+        #LINES 37 AND 38  are for making the ball at the center
+        
+        if abs(center_error) > self.center_deadband:
+            angular_speed = -self.angular_gain * center_error
+            if angular_speed > 0.0:
+                angular_speed = max(angular_speed, self.min_turn_speed)
             else:
-                w = min(w, -self.min_turn)
-
-            t.angular.z = w
-        else:
-            t.angular.z = 0.0
-
-        # ---- linear ----
-        err_width = self.desired_width - width_px
-
-        if abs(err_width) > self.width_deadband_px:
-            v = self.k_lin * err_width
-            v = self.clamp(v, 0.0, self.max_lin)
-
-            # turn-first: if way off-center, don't drive forward
-            if abs(err_center) > self.turn_first:
-                v = 0.0
-
-            # enforce minimum forward effort
-            if 0.0 < v < self.min_forward:
-                v = self.min_forward
-
-            t.linear.x = v
-        else:
-            t.linear.x = 0.0
-
-        self.pub.publish(t)
+                angular_speed = min(angular_speed, -self.min_turn_speed)
+            cmd.angular.z = angular_speed
+            #lines 41-47 ajust the speed when its turning 
+        
+        width_error = self.target_width - width_px
+        if abs(width_error) > self.width_deadband_px:
+            linear_speed = self.linear_gain * width_error
+            if abs(center_error) > self.turn_first_threshold:
+                linear_speed = 0.0
+            if 0.0 < linear_speed < self.min_forward_speed:
+                linear_speed = self.min_forward_speed
+            cmd.linear.x = linear_speed
+            #lines 51 to 57 is for moving the robot forward or backwards determed by the ball width
+        self.cmd_pub.publish(cmd) #publishes the  speed
 
 def main(args=None):
     rclpy.init(args=args)
