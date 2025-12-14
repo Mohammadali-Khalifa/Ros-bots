@@ -1,82 +1,184 @@
+from math import isnan
+
 import rclpy
 from rclpy.node import Node
+
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Int32MultiArray
+
+
 class PID:
-    def __init__(self, kp, ki, kd):
+    def __init__(self, kp, ki, kd, u_min, u_max):
         self.kp = kp
         self.ki = ki
         self.kd = kd
-        self.i = 0.0
-        self.prev_e = 0.0
+        self.u_min = u_min
+        self.u_max = u_max
+        self.integral = 0.0
+        self.prev_error = None
+        self.prev_time = None
+
     def reset(self):
-        self.i = 0.0
-        self.prev_e = 0.0
-    def step(self, e, dt):
-        self.i += e * dt
-        d = (e - self.prev_e) / dt if dt > 0.0 else 0.0
-        self.prev_e = e
-        return self.kp * e + self.ki * self.i + self.kd * d
-class FollowBallController(Node):
-    def __init__(self):
-        super().__init__('follow_ball_controller')
-        self.frame_width = 640.0
-        self.target_width = 220.0  
-        self.pid_turn = PID(kp=2.0, ki=0.0, kd=0.20)
-        self.pid_fwd = PID(kp=0.006, ki=0.0, kd=0.001)
-        self.max_lin = 0.50
-        self.max_ang = 2.00
-        self.min_forward = 0.18   
-        self.min_turn = 0.40      
-        self.deadband = 0.05      # ignore tiny center noise
-        self.turn_first = 0.25    # if ball far from center, don't drive forward
-        self.turn_bias = 0.0      # try -0.15 if it always rotates CCW, +0.15 if CW
-        self.prev_time = self.get_clock().now()
-        self.create_subscription(Int32MultiArray, 'image_info', self.cb, 10)
-        self.pub = self.create_publisher(Twist, 'auto/cmd_vel', 10)
-        self.get_logger().info("Two-PID FollowBallController started.")
-    def cb(self, msg: Int32MultiArray):
-        now = self.get_clock().now()
+        self.integral = 0.0
+        self.prev_error = None
+        self.prev_time = None
+
+    def update(self, error, now):
+        if self.prev_time is None:
+            self.prev_time = now
+            self.prev_error = error
+            u = self.kp * error
+            return max(self.u_min, min(self.u_max, u))
+
         dt = (now - self.prev_time).nanoseconds * 1e-9
-        self.prev_time = now
         if dt <= 0.0:
-            dt = 0.02
+            return 0.0
+
+        self.integral += error * dt
+        de = (error - self.prev_error) / dt
+        u = self.kp * error + self.ki * self.integral + self.kd * de
+
+        if u > self.u_max:
+            u = self.u_max
+        if u < self.u_min:
+            u = self.u_min
+
+        self.prev_time = now
+        self.prev_error = error
+        return u
+
+
+class BallFollowControllerNode(Node):
+    def __init__(self):
+        super().__init__('ball_follow_controller_node')
+
+        self.declare_parameter('image_width', 640.0)
+
+        # IMPORTANT: set this to your measured width at 15cm (you said ~220)
+        self.declare_parameter('desired_width', 220.0)
+
+        self.declare_parameter('kp_ang', 2.0)
+        self.declare_parameter('ki_ang', 0.0)
+        self.declare_parameter('kd_ang', 0.20)
+
+        self.declare_parameter('kp_lin', 0.006)
+        self.declare_parameter('ki_lin', 0.0)
+        self.declare_parameter('kd_lin', 0.001)
+
+        self.declare_parameter('max_linear_speed', 0.6)
+        self.declare_parameter('max_angular_speed', 2.0)
+
+        # friction helpers
+        self.declare_parameter('min_forward', 0.18)   # helps wheels move
+        self.declare_parameter('min_turn', 0.40)      # helps turning
+        self.declare_parameter('deadband', 0.05)      # reduce twitching
+        self.declare_parameter('turn_first', 0.25)    # if ball far off-center, don't drive forward
+        self.declare_parameter('turn_bias', 0.0)      # fix drift (try -0.10 or +0.10 if needed)
+
+        self.image_width = float(self.get_parameter('image_width').value)
+        self.desired_width = float(self.get_parameter('desired_width').value)
+
+        max_lin = float(self.get_parameter('max_linear_speed').value)
+        max_ang = float(self.get_parameter('max_angular_speed').value)
+
+        self.min_forward = float(self.get_parameter('min_forward').value)
+        self.min_turn = float(self.get_parameter('min_turn').value)
+        self.deadband = float(self.get_parameter('deadband').value)
+        self.turn_first = float(self.get_parameter('turn_first').value)
+        self.turn_bias = float(self.get_parameter('turn_bias').value)
+
+        self.pid_ang = PID(
+            float(self.get_parameter('kp_ang').value),
+            float(self.get_parameter('ki_ang').value),
+            float(self.get_parameter('kd_ang').value),
+            -max_ang,
+            max_ang,
+        )
+
+        self.pid_lin = PID(
+            float(self.get_parameter('kp_lin').value),
+            float(self.get_parameter('ki_lin').value),
+            float(self.get_parameter('kd_lin').value),
+            0.0,         # don’t go backwards
+            max_lin,
+        )
+
+        # SUB to your existing image_info topic
+        self.create_subscription(
+            Int32MultiArray,
+            'image_info',            # [center_px, width_px]
+            self.on_measurement,
+            10,
+        )
+
+        # PUB to what your FSM is already listening to
+        self.pub_cmd = self.create_publisher(Twist, 'auto/cmd_vel', 10)
+
+        self.get_logger().info('ball_follow_controller_node started')
+
+    def on_measurement(self, msg):
+        now = self.get_clock().now()
         if len(msg.data) < 2:
-            self.pub.publish(Twist())
             return
-        center = float(msg.data[0])
-        width = float(msg.data[1])
-        if width <= 0.0 or center <= 0.0:
-            self.pid_turn.reset()
-            self.pid_fwd.reset()
-            self.pub.publish(Twist())
+
+        center_px = float(msg.data[0])
+        width_px = float(msg.data[1])
+
+        # not detected
+        if width_px <= 0.0 or center_px <= 0.0 or isnan(center_px):
+            self.pid_ang.reset()
+            self.pid_lin.reset()
+            self.pub_cmd.publish(Twist())
             return
-        half_w = self.frame_width / 2.0
-        # normalized center error: left=-1 .. right=+1
-        err_center = (center - half_w) / half_w
+
+        half_width = self.image_width / 2.0
+        err_center = (center_px - half_width) / half_width   # -1..+1
+
+        # TURN PID (negative so right side turns right if your robot needs it)
         if abs(err_center) < self.deadband:
-            ang_z = 0.0
-            self.pid_turn.reset()   # keeps it from twitching at center
+            ang_output = 0.0
+            self.pid_ang.reset()
         else:
-            ang_z = self.pid_turn.step(-err_center, dt)
-            if ang_z > 0.0:
-                ang_z = max(ang_z, self.min_turn)
+            ang_output = self.pid_ang.update(-err_center, now)
+
+            # minimum turning effort for friction/weak wheel
+            if ang_output > 0.0:
+                ang_output = max(ang_output, self.min_turn)
             else:
-                ang_z = min(ang_z, -self.min_turn)
-        ang_z += self.turn_bias
-        ang_z = max(-self.max_ang, min(self.max_ang, ang_z))
-        # width error: positive => too far => move forward
-        err_width = self.target_width - width
-        lin_x = self.pid_fwd.step(err_width, dt)
-        if lin_x < 0.0:
-            lin_x = 0.0
+                ang_output = min(ang_output, -self.min_turn)
+
+        ang_output = ang_output + self.turn_bias
+
+        # FORWARD PID (width error)
+        lin_error = self.desired_width - width_px
+        lin_output = self.pid_lin.update(lin_error, now)
+
+        # turn-first: don't drive forward until mostly centered
         if abs(err_center) > self.turn_first:
-            lin_x = 0.0
-            self.pid_fwd.reset()
-        if lin_x > 0.0 and lin_x < self.min_forward:
-            lin_x = self.min_forward
-        lin_x = max(0.0, min(self.max_lin, lin_x))
+            lin_output = 0.0
+            self.pid_lin.reset()
+
+        # minimum forward effort
+        if lin_output > 0.0 and lin_output < self.min_forward:
+            lin_output = self.min_forward
+
         twist = Twist()
-        twist.linear.x = lin_x
-        twist.angular.z = ang_z
-        self.pub.publish(twist)
+        twist.linear.x = lin_output
+        twist.angular.z = ang_output
+        self.pub_cmd.publish(twist)
+
+
+def main():
+    rclpy.init()
+    node = BallFollowControllerNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
