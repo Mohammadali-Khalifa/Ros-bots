@@ -45,7 +45,7 @@ class BallFollowControllerNode(Node):
     def __init__(self):
         super().__init__('ball_follow_controller_node')
         self.declare_parameter('image_width', 640.0)
-        self.declare_parameter('desired_width', 220.0)
+        self.declare_parameter('desired_width', 200.0)
         self.declare_parameter('kp_ang', 2.0)
         self.declare_parameter('ki_ang', 0.0)
         self.declare_parameter('kd_ang', 0.20)
@@ -59,7 +59,7 @@ class BallFollowControllerNode(Node):
         self.declare_parameter('deadband', 0.05)
         self.declare_parameter('turn_first', 0.25)
         self.declare_parameter('turn_bias', 0.0)
-        self.declare_parameter('width_deadband_px', 15.0)     
+        self.declare_parameter('width_deadband_px', 30.0)     
         self.declare_parameter('stop_turn_scale', 0.3)       
 
         self.image_width = float(self.get_parameter('image_width').value)
