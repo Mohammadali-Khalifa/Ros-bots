@@ -7,7 +7,6 @@ class Mode(Node):
     def __init__(self):
         super().__init__('Mode_node')
         self.pub = self.create_publisher(String, '/mode', 10)   # publishes a string which is the mode
-
     def mode_select(self):
         self.get_logger().info('Type: A for auto, T for teleop, E for estop')    # prints txt
         while rclpy.ok():
@@ -20,13 +19,11 @@ class Mode(Node):
                 self.pub.publish(String(data='e'))
             else:
                 self.get_logger().info('Type: A for auto, T for teleop, E for estop')
-
 def main(args=None):
     rclpy.init(args=args)
     node = Mode()
     node.mode_select()   # run your input loop
     node.destroy_node()
     rclpy.shutdown()
-
 if __name__ == '__main__':
     main()
