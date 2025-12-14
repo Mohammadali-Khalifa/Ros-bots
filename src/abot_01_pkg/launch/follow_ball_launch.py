@@ -33,4 +33,10 @@ def generate_launch_description():
            name='fsm',
            output='screen'
        ),
+      Node(
+          package='abot_01_pkg',
+          executable='mode',
+          name='mode',
+          output='screen'
+      ),
    ])
