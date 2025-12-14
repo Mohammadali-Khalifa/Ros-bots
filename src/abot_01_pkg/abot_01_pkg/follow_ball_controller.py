@@ -56,9 +56,9 @@ class FollowBallControllerNode(Node):
         self.declare_parameter('target_distance_m', 0.15)    # 15 cm
 
         # --- PID gains ---
-        self.declare_parameter('kp_ang', 0.004)
+        self.declare_parameter('kp_ang', 1.5)
         self.declare_parameter('ki_ang', 0.0)
-        self.declare_parameter('kd_ang', 0.0008)
+        self.declare_parameter('kd_ang', 0.05)
 
         self.declare_parameter('kp_lin', 0.8)
         self.declare_parameter('ki_lin', 0.0)
@@ -115,13 +115,33 @@ class FollowBallControllerNode(Node):
         )
         self.pub_cmd = self.create_publisher(Twist, 'auto/cmd_vel', 10)
 
+        self.last_msg_time = None
+        self.last_twist = Twist()
+        self.create_timer(0.05, self.tick)
+
         self.get_logger().info('FollowBallController started.')
         if self.focal_px <= 0.0:
             self.get_logger().warn("focal_px <= 0, distance control will not work (lin_x forced to 0).")
 
+    def tick(self):
+        now = self.get_clock().now()
+        if self.last_msg_time is None:
+            return
+
+        dt_since_last = (now - self.last_msg_time).nanoseconds * 1e-9
+        if dt_since_last > 0.3:
+            twist = Twist()
+            twist.angular.z = self.min_turn
+            self.pub_cmd.publish(twist)
+            return
+
+        # keep publishing the most recent command (helps if image_info rate is low/uneven)
+        self.pub_cmd.publish(self.last_twist)
+    
     def on_measurement(self, msg: Int32MultiArray):
         now = self.get_clock().now()
-
+        self.last_msg_time = now
+        
         # safety
         if len(msg.data) < 2:
             self.pub_cmd.publish(Twist())
@@ -134,6 +154,7 @@ class FollowBallControllerNode(Node):
         if width <= 0.0 or center < 0.0:
             self.pid_ang.reset()
             self.pid_lin.reset()
+            self.last_twist = Twist()
             self.pub_cmd.publish(Twist())
             return
 
@@ -150,7 +171,7 @@ class FollowBallControllerNode(Node):
         if abs(err_center) < self.deadband:
             ang_z = 0.0
         else:
-            ang_z = self.pid_ang.update(err_center, now)
+            ang_z = self.pid_ang.update(-err_center, now)
 
             # minimum turn boost so weak wheel still turns robot
             if ang_z > 0.0:
@@ -176,6 +197,7 @@ class FollowBallControllerNode(Node):
         twist = Twist()
         twist.linear.x = lin_x
         twist.angular.z = ang_z
+        self.last_twist = twist
         self.pub_cmd.publish(twist)
 
 
