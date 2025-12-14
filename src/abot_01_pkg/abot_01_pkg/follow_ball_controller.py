@@ -1,5 +1,3 @@
-from math import isnan
-
 import rclpy
 from rclpy.node import Node
 
@@ -54,7 +52,7 @@ class FollowBallControllerNode(Node):
 
         # --- Distance model parameters ---
         self.declare_parameter('ball_diameter_m', 0.04)      # 4 cm ball
-        self.declare_parameter('focal_px', 0.0)              # MUST set from calibration
+        self.declare_parameter('focal_px', 0.0)              # set from calibration
         self.declare_parameter('target_distance_m', 0.15)    # 15 cm
 
         # --- PID gains ---
@@ -62,7 +60,6 @@ class FollowBallControllerNode(Node):
         self.declare_parameter('ki_ang', 0.0)
         self.declare_parameter('kd_ang', 0.0008)
 
-        # linear PID now works on distance error (meters)
         self.declare_parameter('kp_lin', 0.8)
         self.declare_parameter('ki_lin', 0.0)
         self.declare_parameter('kd_lin', 0.05)
@@ -71,12 +68,23 @@ class FollowBallControllerNode(Node):
         self.declare_parameter('max_lin', 0.4)
         self.declare_parameter('max_ang', 1.2)
 
+        # --- Simple “weak motor” helpers ---
+        self.declare_parameter('deadband', 0.06)     # ignore small center noise
+        self.declare_parameter('min_turn', 0.25)     # minimum turning effort
+        self.declare_parameter('turn_first', 0.25)   # if ball far from center, stop forward
+        self.declare_parameter('turn_bias', 0.0)     # + turns left, - turns right
+
         # --- Read params ---
         self.frame_width = float(self.get_parameter('frame_width').value)
 
         self.ball_diameter_m = float(self.get_parameter('ball_diameter_m').value)
         self.focal_px = float(self.get_parameter('focal_px').value)
         self.target_distance_m = float(self.get_parameter('target_distance_m').value)
+
+        self.deadband = float(self.get_parameter('deadband').value)
+        self.min_turn = float(self.get_parameter('min_turn').value)
+        self.turn_first = float(self.get_parameter('turn_first').value)
+        self.turn_bias = float(self.get_parameter('turn_bias').value)
 
         max_lin = float(self.get_parameter('max_lin').value)
         max_ang = float(self.get_parameter('max_ang').value)
@@ -90,12 +98,11 @@ class FollowBallControllerNode(Node):
             max_ang,
         )
 
-        # don’t drive backwards
         self.pid_lin = PID(
             float(self.get_parameter('kp_lin').value),
             float(self.get_parameter('ki_lin').value),
             float(self.get_parameter('kd_lin').value),
-            0.0,
+            0.0,       # don’t drive backwards
             max_lin,
         )
 
@@ -108,47 +115,63 @@ class FollowBallControllerNode(Node):
         )
         self.pub_cmd = self.create_publisher(Twist, 'auto/cmd_vel', 10)
 
-        self.get_logger().info('FollowBallController (distance-based) started.')
+        self.get_logger().info('FollowBallController started.')
         if self.focal_px <= 0.0:
-            self.get_logger().warn("Parameter 'focal_px' is <= 0. Set it, or distance control won't work.")
+            self.get_logger().warn("focal_px <= 0, distance control will not work (lin_x forced to 0).")
 
     def on_measurement(self, msg: Int32MultiArray):
         now = self.get_clock().now()
 
+        # safety
         if len(msg.data) < 2:
             self.pub_cmd.publish(Twist())
             return
 
-        center_px = float(msg.data[0])
-        width_px = float(msg.data[1])
+        center = float(msg.data[0])
+        width = float(msg.data[1])
 
         # If ball not detected -> stop + reset
-        if width_px <= 0.0 or center_px < 0.0:
+        if width <= 0.0 or center < 0.0:
             self.pid_ang.reset()
             self.pid_lin.reset()
             self.pub_cmd.publish(Twist())
             return
-            
-        # --- Angular control (keep centered) ---
+
+        # --- Angular control (center the ball) ---
         half_w = self.frame_width / 2.0
         if half_w <= 0.0:
             self.pub_cmd.publish(Twist())
             return
 
-        error_px = (center_px - half_w) / half_w   # -1..+1
-        ang_error = -error_px                      # positive -> turn left
-        ang_z = self.pid_ang.update(ang_error, now)
+        # normalized error: -1..+1
+        err_center = (center - half_w) / half_w
 
-        # --- Distance estimate + linear control ---
-        # Z = (f * D) / w
-        denom = max(width_px, 1.0)
+        # deadband to prevent twitch
+        if abs(err_center) < self.deadband:
+            ang_z = 0.0
+        else:
+            ang_z = self.pid_ang.update(err_center, now)
+
+            # minimum turn boost so weak wheel still turns robot
+            if ang_z > 0.0:
+                ang_z = max(ang_z, self.min_turn)
+            else:
+                ang_z = min(ang_z, -self.min_turn)
+
+        # add bias to fight drift (if needed)
+        ang_z = ang_z + self.turn_bias
+
+        # --- Linear control (keep 15cm distance) ---
         if self.focal_px <= 0.0:
-            # if focal isn't set, safest behavior is: no forward motion
             lin_x = 0.0
         else:
-            Z = (self.focal_px * self.ball_diameter_m) / denom
+            Z = (self.focal_px * self.ball_diameter_m) / max(width, 1.0)
             err_dist = Z - self.target_distance_m   # positive => too far => go forward
             lin_x = self.pid_lin.update(err_dist, now)
+
+        # turn-first: if ball far from center, don’t drive forward yet
+        if abs(err_center) > self.turn_first:
+            lin_x = 0.0
 
         twist = Twist()
         twist.linear.x = lin_x
