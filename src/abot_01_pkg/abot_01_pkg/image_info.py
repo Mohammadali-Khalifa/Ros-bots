@@ -13,7 +13,7 @@ class ImageInfo(Node):
         self.bridge = CvBridge()  # converts ROS images to OpenCV
 
         # subscribes to image_filtered (mono mask: white=ball, black=background)
-        self.sub = self.create_subscription(Image, '/image_filtered', self.image_cb, 10)
+        self.sub = self.create_subscription(Image, 'image_filtered', self.image_cb, 10)
 
         # publishes [center_px, width_px]
         self.pub = self.create_publisher(Int32MultiArray, 'image_info', 10)
