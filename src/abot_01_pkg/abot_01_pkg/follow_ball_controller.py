@@ -11,9 +11,9 @@ class BallFollow(Node):
         self.k_ang = 1.6               # turn gain
         self.k_lin = 0.004             # forward/back gain
         self.max_ang = 2.0
-        self.max_lin = 0.6
+        self.max_lin = 0.8
         self.center_deadband = 0.05    
-        self.width_deadband = 45.0     # pixels for left and right
+        self.width_deadband = 30.0     # pixels for left and right
         
         self.sub = self.create_subscription( Int32MultiArray,'image_info', self.cb,10)
         self.pub = self.create_publisher(Twist, auto/cmd_vel', 10)
