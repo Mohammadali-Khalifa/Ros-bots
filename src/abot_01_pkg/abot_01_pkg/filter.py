@@ -8,8 +8,8 @@ class ColorFilter(Node):
     def __init__(self):
         super().__init__('color_filter')
         self.bridge = CvBridge()
-        self.sub = self.create_subscription(Image, 'camera/image_raw', self.filter, 10) #subscribes to image_filter used by color_filter
-        self.pub = self.create_publisher(Image, 'image_filtered', 10) #publishes to image_filter used by color_filter
+        self.sub = self.create_subscription(Image, '/camera/image_raw', self.filter, 10) #subscribes to image_filter used by color_filter
+        self.pub = self.create_publisher(Image, '/image_filtered', 10) #publishes to image_filter used by color_filter
         
     def filter(self, image_message): # convert ROS image to OpenCV
         bgr = self.bridge.imgmsg_to_cv2(image_message, desired_encoding='bgr8')
