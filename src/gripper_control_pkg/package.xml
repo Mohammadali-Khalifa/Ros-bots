@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>gripper_control_pkg</name>
+  <version>0.0.0</version>
+  <description>Gripper control (Arduino serial)</description>
+  <maintainer email="sudhi@todo.todo">sudhi</maintainer>
+  <license>TODO</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+</package>
