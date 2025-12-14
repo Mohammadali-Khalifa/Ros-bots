@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>pickup_delivery_pkg</name>
+  <version>0.0.0</version>
+  <description>Pickup & delivery using HSV markers + FSM</description>
+  <maintainer email="sudhi@todo.todo">sudhi</maintainer>
+  <license>TODO</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+</package>
