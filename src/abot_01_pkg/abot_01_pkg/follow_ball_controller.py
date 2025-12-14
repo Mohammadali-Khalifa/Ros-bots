@@ -135,6 +135,19 @@ class FollowBallControllerNode(Node):
             lin_x = self.pid_lin.update(err_dist, now)
         if abs(err_center) > self.turn_first:
             lin_x = 0.0
+        MIN_FORWARD_SPEED = 0.15   # m/s (break static friction)
+        MIN_TURN_SPEED = 0.35      # rad/s
+        MAX_FORWARD_SPEED = 0.6
+        MAX_TURN_SPEED = 2.0
+        if lin_x > 0.0 and lin_x < MIN_FORWARD_SPEED:
+            lin_x = MIN_FORWARD_SPEED
+        if ang_z > 0.0 and ang_z < MIN_TURN_SPEED:
+            ang_z = MIN_TURN_SPEED
+        elif ang_z < 0.0 and ang_z > -MIN_TURN_SPEED:
+            ang_z = -MIN_TURN_SPEED
+        lin_x = max(0.0, min(MAX_FORWARD_SPEED, lin_x))
+        ang_z = max(-MAX_TURN_SPEED, min(MAX_TURN_SPEED, ang_z))
+
         twist = Twist()
         twist.linear.x = lin_x
         twist.angular.z = ang_z
