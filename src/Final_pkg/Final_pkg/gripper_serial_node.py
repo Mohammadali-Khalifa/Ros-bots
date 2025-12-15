@@ -37,17 +37,26 @@ class GripperSerialNode(Node):
 
     def on_cmd(self, msg: String):
         cmd = msg.data.strip().lower()
-        if cmd not in ('open', 'close', 'up', 'down', 'stop'):
-            self.get_logger().warn(f'Unknown gripper_cmd: "{cmd}"')
+        to_char = {
+            'open':  'o',
+            'close': 'c',
+            'up':    'u',
+            'down':  'd',
+            'stop':  'e',   
+        }
+    
+        if cmd not in to_char:
+            self.get_logger().warning(f'Unknown gripper_cmd: "{cmd}"')
             return
-
+    
         if self.ser is None:
             self._connect()
             if self.ser is None:
                 return
-
+    
         try:
-            self.ser.write((cmd + '\n').encode('utf-8'))
+            self.ser.write(to_char[cmd].encode('utf-8')) 
+            self.ser.flush()
         except Exception as e:
             self.get_logger().error(f'Serial write failed: {e}')
             try:
