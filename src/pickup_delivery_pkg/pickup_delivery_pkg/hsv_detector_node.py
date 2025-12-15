@@ -16,6 +16,14 @@ COLOR_ID = {
     'red': 4,
 }
 
+# Shape IDs (4th element in marker_measurements)
+# 0 = unknown, 1 = rect/square-like, 2 = round-like
+SHAPE_ID = {
+    'unknown': 0,
+    'rect': 1,
+    'round': 2,
+}
+
 
 class HSVDetector(Node):
     def __init__(self):
@@ -40,7 +48,7 @@ class HSVDetector(Node):
         self.declare_parameter('red2_low',  [170, 70, 50])
         self.declare_parameter('red2_high', [179, 255, 255])
 
-        # Preferred target from FSM: "pickup" / "dropoff" / "" (none)
+        # Preferred target from FSM: "pickup" / "dropoff" / "object" / "" (none)
         self.declare_parameter('pickup_color', 'blue')
         self.declare_parameter('dropoff_color', 'pink')
         self.target_phase = ''  # updated via topic
@@ -82,6 +90,34 @@ class HSVDetector(Node):
         low, high = ranges[color_name]
         return cv2.inRange(hsv, low, high)
 
+    def _classify_shape(self, contour):
+        # Simple contour-based shape classification:
+        # - rect/square tends to approximate to 4 vertices
+        # - circle/ball tends to have many vertices and higher circularity
+        area = cv2.contourArea(contour)
+        if area <= 0:
+            return 'unknown'
+
+        peri = cv2.arcLength(contour, True)
+        if peri <= 0:
+            return 'unknown'
+
+        circularity = 4.0 * np.pi * area / (peri * peri)
+
+        eps = 0.03 * peri
+        approx = cv2.approxPolyDP(contour, eps, True)
+        v = len(approx)
+
+        # Rect-ish: 4 vertices (or sometimes 5-6 when noisy) and not too circular
+        if 4 <= v <= 6 and circularity < 0.90:
+            return 'rect'
+
+        # Round-ish: high circularity OR lots of vertices
+        if circularity >= 0.80 or v >= 7:
+            return 'round'
+
+        return 'unknown'
+
     def _find_best_blob(self, mask, min_area):
         # clean mask
         kernel = np.ones((5, 5), np.uint8)
@@ -111,7 +147,9 @@ class HSVDetector(Node):
 
         x, y, w, h = best_bbox
         cx = x + w // 2
-        return (cx, w), mask
+        shape_name = self._classify_shape(best)
+        shape_id = int(SHAPE_ID.get(shape_name, 0))
+        return (cx, w, shape_id), mask
 
     def image_cb(self, msg: Image):
         min_area = int(self.get_parameter('min_area').value)
@@ -128,12 +166,15 @@ class HSVDetector(Node):
         ranges = self._get_hsv_ranges()
 
         colors = ['blue', 'pink', 'green', 'red']
+
         # If FSM requested a phase, prefer that color first
         preferred = None
         if self.target_phase == 'pickup':
             preferred = pickup_color
         elif self.target_phase == 'dropoff':
             preferred = dropoff_color
+        else:
+            preferred = None
 
         ordered = colors
         if preferred in colors:
@@ -151,24 +192,24 @@ class HSVDetector(Node):
             if m is None:
                 continue
 
-            cx, w = m
+            cx, w, shape_id = m
             # w is a decent proxy for "closeness/size"
             score = w
             if best_measure is None:
-                best_measure = (cx, w)
+                best_measure = (cx, w, shape_id)
                 best_color = cname
                 best_area_proxy = score
                 best_mask = cleaned
             else:
                 # If a preferred color is first, keep it unless it is truly tiny vs others
                 if cname == preferred:
-                    best_measure = (cx, w)
+                    best_measure = (cx, w, shape_id)
                     best_color = cname
                     best_area_proxy = score
                     best_mask = cleaned
                 else:
                     if score > best_area_proxy * 1.25:  # only override if clearly better
-                        best_measure = (cx, w)
+                        best_measure = (cx, w, shape_id)
                         best_color = cname
                         best_area_proxy = score
                         best_mask = cleaned
@@ -183,10 +224,10 @@ class HSVDetector(Node):
         # publish measurements
         meas = Int32MultiArray()
         if best_measure is None or best_color is None:
-            meas.data = [-1, -1, 0]
+            meas.data = [-1, -1, 0, 0]
         else:
-            cx, w = best_measure
-            meas.data = [int(cx), int(w), int(COLOR_ID.get(best_color, 0))]
+            cx, w, shape_id = best_measure
+            meas.data = [int(cx), int(w), int(COLOR_ID.get(best_color, 0)), int(shape_id)]
         self.meas_pub.publish(meas)
 
 
