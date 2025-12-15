@@ -1,5 +1,5 @@
 from setuptools import find_packages, setup
-package_name = 'abot_01_pkg'
+package_name = 'Final_pkg'
 setup(
    name=package_name,
    version='0.0.0',
@@ -11,7 +11,7 @@ setup(
         ['package.xml']),
        # install launch file(s)
        ('share/' + package_name + '/launch', [
-           'launch/follow_ball_launch.py',
+           'launch/Final.py',
        ]),
    ],
    install_requires=['setuptools'],
@@ -23,11 +23,11 @@ setup(
    tests_require=['pytest'],
    entry_points={
        'console_scripts': [
-           'fsm = abot_01_pkg.FSM:main',
-           'mode = abot_01_pkg.Mode:main',
-           'filter = abot_01_pkg.filter:main',
-           'image_info = abot_01_pkg.image_info:main',
-           'follow_ball_controller = abot_01_pkg.follow_ball_controller:main',
+           'fsm = Final_pkg.FSM:main',
+           'mode = Final_pkg.Mode:main',
+           'filter = Final_pkg.filter:main',
+           'image_info = Final_pkg.image_info:main',
+           'follow_ball_controller = Final_pkg.follow_ball_controller:main',
        ],
    },
 )
