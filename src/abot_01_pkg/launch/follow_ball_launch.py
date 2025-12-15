@@ -42,11 +42,4 @@ def generate_launch_description():
            namespace=robot_ns,
            output='screen'
        ),
-      Node(
-          package='abot_01_pkg',
-          executable='mode',
-          name='mode',
-          namespace=robot_ns,
-          output='screen'
-      ),
    ])
