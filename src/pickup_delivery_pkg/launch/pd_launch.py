@@ -60,7 +60,7 @@ def generate_launch_description():
                 'dropoff_color': dropoff_color,
                 'force_autonomous': False,
                 # Turn on the lift sequence only if the gripper needs it:
-                'use_lift': False,
+                'use_lift': True,
                 'use_gripper': use_gripper,
             }],
         ),
