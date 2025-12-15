@@ -6,7 +6,7 @@ package_name = 'Final_pkg'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],   # <-- FORCE include the python module
+    packages=[package_name],  
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -28,7 +28,7 @@ setup(
             'image_info = Final_pkg.image_info:main',
             'follow_ball_controller = Final_pkg.follow_ball_controller:main',
             'gripper_keyboard = Final_pkg.gripper_keyboard_node:main',
-            'gripper_serial = final_pkg.gripper_serial_node:main',
+            'gripper_serial = Final_pkg.gripper_serial_node:main',
         ],
     },
 )
