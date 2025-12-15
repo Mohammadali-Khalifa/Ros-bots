@@ -1,8 +1,11 @@
 from math import isnan
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Int32MultiArray, String
 from geometry_msgs.msg import Twist
+
+ID_TO_COLOR = {1: 'blue', 2: 'pink', 3: 'green', 4: 'red'}
+ID_TO_SHAPE = {0: 'unknown', 1: 'rect', 2: 'round'}
 
 class BallFollow(Node):
     def __init__(self):
@@ -19,7 +22,31 @@ class BallFollow(Node):
         
         self.create_subscription(Int32MultiArray, 'image_info', self.image_callback, 10)  #subscibes to image_info to get the ball info
         self.cmd_pub = self.create_publisher(Twist, 'auto/cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
-        
+
+        self.target_pub = self.create_publisher(String, 'target_request', 10)
+        self.grip_sub = self.create_subscription(String, 'gripper_cmd', self.gripper_cb, 10)
+
+        self.pickup_color = 'blue'
+        self.dropoff_color = 'pink'
+
+        self.state = 'SEARCH_PICKUP'
+        self.last_gripper_cmd = ''
+
+    def gripper_cb(self, msg: String):
+        self.last_gripper_cmd = msg.data.strip().lower()
+
+    def _publish_target(self, phase: str):
+        self.target_pub.publish(String(data=phase))
+
+    def _stop(self):
+        cmd = Twist()
+        self.cmd_pub.publish(cmd)
+
+    def _spin(self):
+        cmd = Twist()
+        cmd.angular.z = self.min_turn_speed
+        self.cmd_pub.publish(cmd)
+
     def image_callback(self, msg):
         cmd = Twist()
         if len(msg.data) < 2:
@@ -32,12 +59,123 @@ class BallFollow(Node):
         if width_px <= 0.0 or center_px <= 0.0 or isnan(center_px):
             self.cmd_pub.publish(cmd)
             return
-                #lines 32-34 is for if the ball is not detetcted
+                #lines 59-61 is for if the ball is not detetcted
         
         image_center = self.image_width / 2.0
         center_error = (center_px - image_center) / image_center
-        #LINES 37 AND 38  are for making the ball at the center
-        
+        #lines 64 AND 65  are for making the ball at the center
+
+        if len(msg.data) >= 4:
+            color_id = int(msg.data[2])
+            shape_id = int(msg.data[3])
+            seen_color = ID_TO_COLOR.get(color_id, '')
+            seen_shape = ID_TO_SHAPE.get(shape_id, 'unknown')
+
+            close_enough = (abs(center_error) <= self.center_deadband) and (abs(self.target_width - width_px) <= self.width_deadband_px)
+
+            if self.state == 'SEARCH_PICKUP':
+                self._publish_target('pickup')
+                if seen_color == self.pickup_color and seen_shape == 'rect':
+                    self.state = 'APPROACH_PICKUP'
+                else:
+                    self._spin()
+                return
+
+            if self.state == 'APPROACH_PICKUP':
+                self._publish_target('pickup')
+                if seen_color != self.pickup_color:
+                    self.state = 'SEARCH_PICKUP'
+                    self._spin()
+                    return
+
+                if abs(center_error) > self.center_deadband:
+                    angular_speed = -self.angular_gain * center_error
+                    if angular_speed > 0.0:
+                        angular_speed = max(angular_speed, self.min_turn_speed)
+                    else:
+                        angular_speed = min(angular_speed, -self.min_turn_speed)
+                    cmd.angular.z = angular_speed
+                    #lines 91-97 ajust the speed when its turning 
+
+                width_error = self.target_width - width_px
+                if abs(width_error) > self.width_deadband_px:
+                    linear_speed = self.linear_gain * width_error
+                    if abs(center_error) > self.turn_first_threshold:
+                        linear_speed = 0.0
+                    if 0.0 < linear_speed < self.min_forward_speed:
+                        linear_speed = self.min_forward_speed
+                    cmd.linear.x = linear_speed
+                    #lines 101 to 107 is for moving the robot forward or backwards determed by the ball width
+
+                self.cmd_pub.publish(cmd) #publishes the  speed
+                if close_enough:
+                    self._stop()
+                    self.state = 'SEARCH_OBJECT'
+                return
+
+            if self.state == 'SEARCH_OBJECT':
+                self._publish_target('object')
+                if seen_shape == 'round':
+                    self.state = 'WAIT_GRAB'
+                    self._stop()
+                else:
+                    self._spin()
+                return
+
+            if self.state == 'WAIT_GRAB':
+                self._publish_target('object')
+                self._stop()
+                if self.last_gripper_cmd == 'close':
+                    self.state = 'SEARCH_DROPOFF'
+                return
+
+            if self.state == 'SEARCH_DROPOFF':
+                self._publish_target('dropoff')
+                if seen_color == self.dropoff_color and seen_shape == 'rect':
+                    self.state = 'APPROACH_DROPOFF'
+                else:
+                    self._spin()
+                return
+
+            if self.state == 'APPROACH_DROPOFF':
+                self._publish_target('dropoff')
+                if seen_color != self.dropoff_color:
+                    self.state = 'SEARCH_DROPOFF'
+                    self._spin()
+                    return
+
+                if abs(center_error) > self.center_deadband:
+                    angular_speed = -self.angular_gain * center_error
+                    if angular_speed > 0.0:
+                        angular_speed = max(angular_speed, self.min_turn_speed)
+                    else:
+                        angular_speed = min(angular_speed, -self.min_turn_speed)
+                    cmd.angular.z = angular_speed
+                    #lines 147-153 ajust the speed when its turning 
+
+                width_error = self.target_width - width_px
+                if abs(width_error) > self.width_deadband_px:
+                    linear_speed = self.linear_gain * width_error
+                    if abs(center_error) > self.turn_first_threshold:
+                        linear_speed = 0.0
+                    if 0.0 < linear_speed < self.min_forward_speed:
+                        linear_speed = self.min_forward_speed
+                    cmd.linear.x = linear_speed
+                    #lines 157 to 163 is for moving the robot forward or backwards determed by the ball width
+
+                self.cmd_pub.publish(cmd) #publishes the  speed
+                if close_enough:
+                    self._stop()
+                    self.state = 'WAIT_RELEASE'
+                return
+
+            if self.state == 'WAIT_RELEASE':
+                self._publish_target('dropoff')
+                self._stop()
+                if self.last_gripper_cmd == 'open':
+                    self.state = 'SEARCH_PICKUP'
+                return
+
         if abs(center_error) > self.center_deadband:
             angular_speed = -self.angular_gain * center_error
             if angular_speed > 0.0:
@@ -45,7 +183,7 @@ class BallFollow(Node):
             else:
                 angular_speed = min(angular_speed, -self.min_turn_speed)
             cmd.angular.z = angular_speed
-            #lines 41-47 ajust the speed when its turning 
+            #lines 179-185 ajust the speed when its turning 
         
         width_error = self.target_width - width_px
         if abs(width_error) > self.width_deadband_px:
@@ -55,7 +193,7 @@ class BallFollow(Node):
             if 0.0 < linear_speed < self.min_forward_speed:
                 linear_speed = self.min_forward_speed
             cmd.linear.x = linear_speed
-            #lines 51 to 57 is for moving the robot forward or backwards determed by the ball width
+            #lines 189 to 195 is for moving the robot forward or backwards determed by the ball width
         self.cmd_pub.publish(cmd) #publishes the  speed
 
 def main(args=None):
