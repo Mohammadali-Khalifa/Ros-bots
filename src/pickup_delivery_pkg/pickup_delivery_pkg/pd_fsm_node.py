@@ -1,168 +1,253 @@
-from math import isnan
+import time
+
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray, String
+
+from std_msgs.msg import String, Int32MultiArray
 from geometry_msgs.msg import Twist
 
+ID_TO_COLOR = {1: 'blue', 2: 'pink', 3: 'green', 4: 'red'}
 
 class PickupDeliveryFSM(Node):
     def __init__(self):
         super().__init__('pickup_delivery_fsm_node')
 
-        self.declare_parameter('image_width', 640.0)
-        self.declare_parameter('pickup_desired_width', 120.0)
-        self.declare_parameter('dropoff_desired_width', 120.0)
+        # Params
+        self.declare_parameter('pickup_color', 'blue')
+        self.declare_parameter('dropoff_color', 'pink')
 
-        self.declare_parameter('search_angular_speed', 0.4)
-        self.declare_parameter('max_linear', 0.25)
-        self.declare_parameter('max_angular', 1.0)
+        self.declare_parameter('image_width', 640)
 
-        self.declare_parameter('kp_ang', 0.8)
-        self.declare_parameter('kp_lin', 0.003)
+        # control behavior
+        self.declare_parameter('center_tol_px', 35)
+        self.declare_parameter('desired_width', 140)      # size when "close enough"
+        self.declare_parameter('width_tol', 15)
 
-        self.image_width = float(self.get_parameter('image_width').value)
+        self.declare_parameter('k_turn', 0.0035)          # P control for angular
+        self.declare_parameter('k_fwd', 0.006)            # P control for linear
+        self.declare_parameter('max_lin', 0.20)
+        self.declare_parameter('max_ang', 1.0)
 
-        self.pub_auto = self.create_publisher(Twist, 'auto_cmd_vel', 10)
-        self.pub_mode = self.create_publisher(String, 'mode_request', 10)
-        self.pub_grip = self.create_publisher(String, 'gripper_cmd', 10)
+        # mode behavior
+        self.declare_parameter('force_autonomous', True)
 
-        self.create_subscription(Float32MultiArray, 'marker_measurements', self.on_meas, 10)
+        # gripper behavior
+        self.declare_parameter('use_gripper', True)
+        self.declare_parameter('use_lift', False)
+        self.declare_parameter('pre_open_seconds', 0.4)
+        self.declare_parameter('action_seconds', 0.8)     # open/close duration
+        self.declare_parameter('lift_action_seconds', 0.8)
 
+        # Topics
+        self.meas_sub = self.create_subscription(Int32MultiArray, 'marker_measurements', self.meas_cb, 10)
+
+        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel_auto', 10)
+        self.mode_pub = self.create_publisher(String, 'mode_request', 10)
+        self.target_pub = self.create_publisher(String, 'target_request', 10)   # tell detector pickup/dropoff
+        self.grip_pub = self.create_publisher(String, 'gripper_cmd', 10)
+
+        self.last_meas = (-1, -1, 0)  # cx, w, color_id
         self.state = 'SEARCH_PICKUP'
-        self.last_center = float('nan')
-        self.last_width = 0.0
-        self.last_color_id = 0.0
+        self.state_ts = time.time()
 
-        self.grab_sent = False
-        self.release_sent = False
+        self.get_logger().info('Pickup/Delivery FSM started')
 
-        self.create_timer(0.05, self.tick)
-        self.get_logger().info('pickup_delivery_fsm_node started')
+        self.timer = self.create_timer(0.05, self.tick)  # 20 Hz
 
-    def on_meas(self, msg: Float32MultiArray):
-        if len(msg.data) < 3:
+    def meas_cb(self, msg: Int32MultiArray):
+        if len(msg.data) >= 3:
+            self.last_meas = (int(msg.data[0]), int(msg.data[1]), int(msg.data[2]))
+
+    def set_state(self, s: str):
+        if s != self.state:
+            self.get_logger().info(f'{self.state} -> {s}')
+        self.state = s
+        self.state_ts = time.time()
+
+    def elapsed(self) -> float:
+        return time.time() - self.state_ts
+
+    def publish_mode(self):
+        if bool(self.get_parameter('force_autonomous').value):
+            m = String()
+            m.data = 'AUTONOMOUS'
+            self.mode_pub.publish(m)
+
+    def stop(self):
+        t = Twist()
+        t.linear.x = 0.0
+        t.angular.z = 0.0
+        self.cmd_pub.publish(t)
+
+    def target_request(self, phase: str):
+        msg = String()
+        msg.data = phase
+        self.target_pub.publish(msg)
+
+    def gripper(self, cmd: str):
+        if not bool(self.get_parameter('use_gripper').value):
             return
-        self.last_center = float(msg.data[0])
-        self.last_width = float(msg.data[1])
-        self.last_color_id = float(msg.data[2])
+        msg = String()
+        msg.data = cmd
+        self.grip_pub.publish(msg)
 
-    def _clip(self, x, lo, hi):
-        return max(lo, min(hi, x))
+    def approach_control(self, cx: int, w: int):
+        img_w = int(self.get_parameter('image_width').value)
+        center = img_w // 2
+
+        center_tol = int(self.get_parameter('center_tol_px').value)
+        desired_w = int(self.get_parameter('desired_width').value)
+        width_tol = int(self.get_parameter('width_tol').value)
+
+        k_turn = float(self.get_parameter('k_turn').value)
+        k_fwd = float(self.get_parameter('k_fwd').value)
+
+        max_lin = float(self.get_parameter('max_lin').value)
+        max_ang = float(self.get_parameter('max_ang').value)
+
+        if cx < 0 or w < 0:
+            self.stop()
+            return False
+
+        err_x = (center - cx)
+        err_w = (desired_w - w)
+
+        # angular: turn toward target
+        ang = k_turn * err_x
+
+        # linear: move forward if too small, backward if too big (optional)
+        lin = k_fwd * err_w
+
+        # deadbands
+        if abs(err_x) < center_tol:
+            ang = 0.0
+        if abs(err_w) < width_tol:
+            lin = 0.0
+
+        # clamp
+        lin = max(-max_lin, min(max_lin, lin))
+        ang = max(-max_ang, min(max_ang, ang))
+
+        t = Twist()
+        t.linear.x = float(lin)
+        t.angular.z = float(ang)
+        self.cmd_pub.publish(t)
+
+        close_enough = (abs(err_x) < center_tol) and (abs(err_w) < width_tol)
+        return close_enough
 
     def tick(self):
-        self.pub_mode.publish(String(data='AUTONOMOUS'))
+        self.publish_mode()
 
-        center = self.last_center
-        width = self.last_width
-        cid = self.last_color_id  # 1=pickup, 2=dropoff
+        pickup_color = self.get_parameter('pickup_color').value.strip().lower()
+        dropoff_color = self.get_parameter('dropoff_color').value.strip().lower()
 
-        if isnan(center) or width <= 0.0 or cid == 0.0:
-            if self.state.startswith('SEARCH'):
-                tw = Twist()
-                tw.angular.z = float(self.get_parameter('search_angular_speed').value)
-                self.pub_auto.publish(tw)
-            else:
-                self.pub_auto.publish(Twist())
-            return
-
-        half = self.image_width / 2.0
-        error_norm = (center - half) / half
-
-        kp_ang = float(self.get_parameter('kp_ang').value)
-        kp_lin = float(self.get_parameter('kp_lin').value)
-
-        max_lin = float(self.get_parameter('max_linear').value)
-        max_ang = float(self.get_parameter('max_angular').value)
+        cx, w, cid = self.last_meas
+        seen_color = ID_TO_COLOR.get(cid, '')
 
         if self.state == 'SEARCH_PICKUP':
-            if cid == 1.0:
-                self.state = 'APPROACH_PICKUP'
-                self.grab_sent = False
+            self.target_request('pickup')
+            if seen_color == pickup_color and cx >= 0:
+                self.set_state('APPROACH_PICKUP')
             else:
-                tw = Twist()
-                tw.angular.z = float(self.get_parameter('search_angular_speed').value)
-                self.pub_auto.publish(tw)
-            return
+                # slow spin search
+                t = Twist()
+                t.linear.x = 0.0
+                t.angular.z = 0.35
+                self.cmd_pub.publish(t)
 
-        if self.state == 'APPROACH_PICKUP':
-            if cid != 1.0:
-                self.state = 'SEARCH_PICKUP'
-                self.pub_auto.publish(Twist())
+        elif self.state == 'APPROACH_PICKUP':
+            self.target_request('pickup')
+            if seen_color != pickup_color or cx < 0:
+                self.set_state('SEARCH_PICKUP')
                 return
 
-            desired = float(self.get_parameter('pickup_desired_width').value)
-            lin_error = desired - width
+            close_enough = self.approach_control(cx, w)
+            if close_enough:
+                self.stop()
+                self.set_state('GRAB')
 
-            tw = Twist()
-            tw.angular.z = self._clip(-kp_ang * error_norm, -max_ang, max_ang)
-            tw.linear.x = self._clip(kp_lin * lin_error, 0.0, max_lin)
-            self.pub_auto.publish(tw)
+        elif self.state == 'GRAB':
+            self.target_request('pickup')
+            use_lift = bool(self.get_parameter('use_lift').value)
+            pre_open = float(self.get_parameter('pre_open_seconds').value)
+            action_s = float(self.get_parameter('action_seconds').value)
+            lift_s = float(self.get_parameter('lift_action_seconds').value)
 
-            if abs(lin_error) < 10.0 and abs(error_norm) < 0.1:
-                self.state = 'GRAB'
-                self.pub_auto.publish(Twist())
-            return
-
-        if self.state == 'GRAB':
-            if not self.grab_sent:
-                self.pub_grip.publish(String(data='close'))
-                self.grab_sent = True
-            self.state = 'SEARCH_DROPOFF'
-            return
-
-        if self.state == 'SEARCH_DROPOFF':
-            if cid == 2.0:
-                self.state = 'APPROACH_DROPOFF'
-                self.release_sent = False
+            # Sequence:
+            # open -> down -> close -> up (optional)
+            if use_lift:
+                if self.elapsed() < pre_open:
+                    self.gripper('open')
+                elif self.elapsed() < pre_open + lift_s:
+                    self.gripper('down')
+                elif self.elapsed() < pre_open + lift_s + action_s:
+                    self.gripper('close')
+                elif self.elapsed() < pre_open + lift_s + action_s + lift_s:
+                    self.gripper('up')
+                else:
+                    self.set_state('SEARCH_DROPOFF')
             else:
-                tw = Twist()
-                tw.angular.z = float(self.get_parameter('search_angular_speed').value)
-                self.pub_auto.publish(tw)
-            return
+                if self.elapsed() < action_s:
+                    self.gripper('close')
+                else:
+                    self.set_state('SEARCH_DROPOFF')
 
-        if self.state == 'APPROACH_DROPOFF':
-            if cid != 2.0:
-                self.state = 'SEARCH_DROPOFF'
-                self.pub_auto.publish(Twist())
+        elif self.state == 'SEARCH_DROPOFF':
+            self.target_request('dropoff')
+            if seen_color == dropoff_color and cx >= 0:
+                self.set_state('APPROACH_DROPOFF')
+            else:
+                t = Twist()
+                t.linear.x = 0.0
+                t.angular.z = 0.35
+                self.cmd_pub.publish(t)
+
+        elif self.state == 'APPROACH_DROPOFF':
+            self.target_request('dropoff')
+            if seen_color != dropoff_color or cx < 0:
+                self.set_state('SEARCH_DROPOFF')
                 return
 
-            desired = float(self.get_parameter('dropoff_desired_width').value)
-            lin_error = desired - width
+            close_enough = self.approach_control(cx, w)
+            if close_enough:
+                self.stop()
+                self.set_state('RELEASE')
 
-            tw = Twist()
-            tw.angular.z = self._clip(-kp_ang * error_norm, -max_ang, max_ang)
-            tw.linear.x = self._clip(kp_lin * lin_error, 0.0, max_lin)
-            self.pub_auto.publish(tw)
+        elif self.state == 'RELEASE':
+            self.target_request('dropoff')
+            use_lift = bool(self.get_parameter('use_lift').value)
+            action_s = float(self.get_parameter('action_seconds').value)
+            lift_s = float(self.get_parameter('lift_action_seconds').value)
 
-            if abs(lin_error) < 10.0 and abs(error_norm) < 0.1:
-                self.state = 'RELEASE'
-                self.pub_auto.publish(Twist())
-            return
+            if use_lift:
+                # down -> open -> up
+                if self.elapsed() < lift_s:
+                    self.gripper('down')
+                elif self.elapsed() < lift_s + action_s:
+                    self.gripper('open')
+                elif self.elapsed() < lift_s + action_s + lift_s:
+                    self.gripper('up')
+                else:
+                    self.set_state('DONE')
+            else:
+                if self.elapsed() < action_s:
+                    self.gripper('open')
+                else:
+                    self.set_state('DONE')
 
-        if self.state == 'RELEASE':
-            if not self.release_sent:
-                self.pub_grip.publish(String(data='open'))
-                self.release_sent = True
-            self.state = 'DONE'
-            return
+        elif self.state == 'DONE':
+            self.target_request('')
+            self.stop()
 
-        if self.state == 'DONE':
-            self.pub_mode.publish(String(data='STOP'))
-            self.pub_auto.publish(Twist())
-            return
+        else:
+            self.stop()
+            self.set_state('SEARCH_PICKUP')
 
 
-def main(args=None):
-    rclpy.init(args=args)
+def main():
+    rclpy.init()
     node = PickupDeliveryFSM()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-
-if __name__ == '__main__':
-    main()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
