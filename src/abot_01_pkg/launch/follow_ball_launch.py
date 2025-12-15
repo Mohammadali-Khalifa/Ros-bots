@@ -2,23 +2,28 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 def generate_launch_description():
+   robot_ns = 'abot_01' 
+
    return LaunchDescription([
        Node(
            package='abot_01_pkg',
            executable='filter',
            name='color_filter',
+           namespace=robot_ns,
            output='screen'
        ),
        Node(
            package='abot_01_pkg',
            executable='image_info',
            name='image_info',
+           namespace=robot_ns,
            output='screen'
        ),
       Node(
           package='abot_01_pkg',
           executable='follow_ball_controller',
           name='follow_ball_controller',
+          namespace=robot_ns,
           output='screen',
           parameters=[{
               'focal_px': 664.0,
@@ -31,12 +36,14 @@ def generate_launch_description():
            package='abot_01_pkg',
            executable='fsm',
            name='fsm',
+           namespace=robot_ns,
            output='screen'
        ),
       Node(
           package='abot_01_pkg',
           executable='mode',
           name='mode',
+          namespace=robot_ns,
           output='screen'
       ),
    ])
