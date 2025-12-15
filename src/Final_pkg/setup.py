@@ -28,7 +28,7 @@ setup(
             'image_info = Final_pkg.image_info:main',
             'follow_ball_controller = Final_pkg.follow_ball_controller:main',
             'gripper_keyboard = Final_pkg.gripper_keyboard_node:main',
-            'gripper_serial = Final_pkg.gripper_serial_node:main',
+            'gripper_serial = final_pkg.gripper_serial_node:main',
         ],
     },
 )
