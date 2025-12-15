@@ -42,4 +42,11 @@ def generate_launch_description():
            namespace=robot_ns,
            output='screen'
        ),
+       Node(
+           package='Final_pkg',
+           executable='mode',
+           name='mode',
+           namespace=robot_ns,
+           output='screen'
+       ),
    ])
