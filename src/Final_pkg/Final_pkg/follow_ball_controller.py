@@ -50,20 +50,33 @@ class BallFollow(Node):
     def image_callback(self, msg):
         cmd = Twist()
         if len(msg.data) < 2:
-            self.cmd_pub.publish(cmd)
+            self._stop()
             return
-            
-        center_px = float(msg.data[0])  #gets the center pos of the ball in pixels
-        width_px = float(msg.data[1])    #gets the width of the ball in pixels
-        
-        if width_px <= 0.0 or center_px <= 0.0 or isnan(center_px):
-            self.cmd_pub.publish(cmd)
-            return
-                #lines 59-61 is for if the ball is not detetcted
-        
+
+        center_px = float(msg.data[0])
+        width_px = float(msg.data[1])
+
         image_center = self.image_width / 2.0
-        center_error = (center_px - image_center) / image_center
-        #lines 64 AND 65  are for making the ball at the center
+        center_error = 0.0
+        if center_px > 0.0 and not isnan(center_px):
+            center_error = (center_px - image_center) / image_center
+
+        if width_px <= 0.0 or center_px <= 0.0 or isnan(center_px):
+            if self.state == 'SEARCH_PICKUP':
+                self._publish_target('pickup')
+                self._spin()
+                return
+            if self.state == 'SEARCH_OBJECT':
+                self._publish_target('object')
+                self._spin()
+                return
+            if self.state == 'SEARCH_DROPOFF':
+                self._publish_target('dropoff')
+                self._spin()
+                return
+
+            self._stop()
+            return
 
         if len(msg.data) >= 4:
             color_id = int(msg.data[2])
@@ -71,7 +84,9 @@ class BallFollow(Node):
             seen_color = ID_TO_COLOR.get(color_id, '')
             seen_shape = ID_TO_SHAPE.get(shape_id, 'unknown')
 
-            close_enough = (abs(center_error) <= self.center_deadband) and (abs(self.target_width - width_px) <= self.width_deadband_px)
+            close_enough = (abs(center_error) <= self.center_deadband) and (
+                abs(self.target_width - width_px) <= self.width_deadband_px
+            )
 
             if self.state == 'SEARCH_PICKUP':
                 self._publish_target('pickup')
@@ -95,7 +110,6 @@ class BallFollow(Node):
                     else:
                         angular_speed = min(angular_speed, -self.min_turn_speed)
                     cmd.angular.z = angular_speed
-                    #lines 91-97 ajust the speed when its turning 
 
                 width_error = self.target_width - width_px
                 if abs(width_error) > self.width_deadband_px:
@@ -105,9 +119,8 @@ class BallFollow(Node):
                     if 0.0 < linear_speed < self.min_forward_speed:
                         linear_speed = self.min_forward_speed
                     cmd.linear.x = linear_speed
-                    #lines 101 to 107 is for moving the robot forward or backwards determed by the ball width
 
-                self.cmd_pub.publish(cmd) #publishes the  speed
+                self.cmd_pub.publish(cmd)
                 if close_enough:
                     self._stop()
                     self.state = 'SEARCH_OBJECT'
@@ -151,7 +164,6 @@ class BallFollow(Node):
                     else:
                         angular_speed = min(angular_speed, -self.min_turn_speed)
                     cmd.angular.z = angular_speed
-                    #lines 147-153 ajust the speed when its turning 
 
                 width_error = self.target_width - width_px
                 if abs(width_error) > self.width_deadband_px:
@@ -161,9 +173,8 @@ class BallFollow(Node):
                     if 0.0 < linear_speed < self.min_forward_speed:
                         linear_speed = self.min_forward_speed
                     cmd.linear.x = linear_speed
-                    #lines 157 to 163 is for moving the robot forward or backwards determed by the ball width
 
-                self.cmd_pub.publish(cmd) #publishes the  speed
+                self.cmd_pub.publish(cmd)
                 if close_enough:
                     self._stop()
                     self.state = 'WAIT_RELEASE'
@@ -183,8 +194,7 @@ class BallFollow(Node):
             else:
                 angular_speed = min(angular_speed, -self.min_turn_speed)
             cmd.angular.z = angular_speed
-            #lines 179-185 ajust the speed when its turning 
-        
+
         width_error = self.target_width - width_px
         if abs(width_error) > self.width_deadband_px:
             linear_speed = self.linear_gain * width_error
@@ -193,8 +203,8 @@ class BallFollow(Node):
             if 0.0 < linear_speed < self.min_forward_speed:
                 linear_speed = self.min_forward_speed
             cmd.linear.x = linear_speed
-            #lines 189 to 195 is for moving the robot forward or backwards determed by the ball width
-        self.cmd_pub.publish(cmd) #publishes the  speed
+
+        self.cmd_pub.publish(cmd)
 
 def main(args=None):
     rclpy.init(args=args)
