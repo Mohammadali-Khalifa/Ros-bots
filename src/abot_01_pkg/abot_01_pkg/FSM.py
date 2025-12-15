@@ -12,11 +12,11 @@ class FSMCode(Node):
         self.estop_active = False
         self.teleop_cmd = Twist()
         self.auto_cmd = Twist()
-        self.create_subscription(Twist, '/teleop/cmd_vel', self.teleop_cb, 10)
-        self.create_subscription(Twist, '/auto/cmd_vel', self.auto_cb, 10)
-        self.create_subscription(String, '/mode', self.mode_cb, 10)
-        self.create_subscription(Bool, '/estop', self.estop_cb, 10)
-        self.cmd_pub = self.create_publisher(Twist, '/abot/cmd_vel', 10)
+        self.create_subscription(Twist, 'teleop/cmd_vel', self.teleop_cb, 10)
+        self.create_subscription(Twist, 'auto/cmd_vel', self.auto_cb, 10)
+        self.create_subscription(String, 'mode', self.mode_cb, 10)
+        self.create_subscription(Bool, 'estop', self.estop_cb, 10)
+        self.cmd_pub = self.create_publisher(Twist, 'abot/cmd_vel', 10)
         self.timer = self.create_timer(0.05, self.update)
         self.get_logger().info('FSM started in TELEOP mode')
     def teleop_cb(self, msg: Twist):
