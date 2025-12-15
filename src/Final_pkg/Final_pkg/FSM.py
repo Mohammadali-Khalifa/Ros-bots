@@ -8,7 +8,9 @@ class FSMCode(Node):
 
     def __init__(self):
         super().__init__('abot_fsm')
-        self.current_mode = 'TELEOP'
+
+        self.current_mode = 'AUTO'
+
         self.estop_active = False
         self.teleop_cmd = Twist()
         self.auto_cmd = Twist()
@@ -18,11 +20,15 @@ class FSMCode(Node):
         self.create_subscription(Bool, 'estop', self.estop_cb, 10)
         self.cmd_pub = self.create_publisher(Twist, '/abot/cmd_vel', 10)
         self.timer = self.create_timer(0.05, self.update)
-        self.get_logger().info('FSM started in TELEOP mode')
+
+        self.get_logger().info(f'FSM started in {self.current_mode} mode')
+
     def teleop_cb(self, msg: Twist):
         self.teleop_cmd = msg
+
     def auto_cb(self, msg: Twist):
         self.auto_cmd = msg
+
     def mode_cb(self, msg: String):
         key = msg.data.strip().lower()
         if key == 't':
@@ -36,10 +42,12 @@ class FSMCode(Node):
             self.get_logger().info('Mode -> ESTOP')
         else:
             self.get_logger().warn(f'Unknown mode key: "{msg.data}"')
+
     def estop_cb(self, msg: Bool):
         self.estop_active = msg.data
+
     def update(self):
-        cmd = Twist() 
+        cmd = Twist()
         if self.estop_active or self.current_mode == 'ESTOP':
             pass  # keep zeros
         elif self.current_mode == 'TELEOP':
@@ -47,6 +55,8 @@ class FSMCode(Node):
         elif self.current_mode == 'AUTO':
             cmd = self.auto_cmd
         self.cmd_pub.publish(cmd)
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = FSMCode()
