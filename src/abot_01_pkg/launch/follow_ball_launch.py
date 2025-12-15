@@ -5,14 +5,17 @@ def generate_launch_description():
    robot_ns = 'abot_01' 
 
    return LaunchDescription([
-       Node(
-           package='abot_01_pkg',
-           executable='filter',
-           name='color_filter',
-           namespace=robot_ns,
-           output='screen'
-       ),
-       Node(
+      Node(
+          package='abot_01_pkg',
+          executable='filter',
+          name='color_filter',
+          namespace=robot_ns,
+          output='screen',
+          remappings=[
+              ('camera/image_raw', '/camera/image_raw'),
+          ],
+      ),
+      Node(
            package='abot_01_pkg',
            executable='image_info',
            name='image_info',
