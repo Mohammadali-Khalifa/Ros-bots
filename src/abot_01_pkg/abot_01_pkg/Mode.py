@@ -6,7 +6,7 @@ from std_msgs.msg import Bool
 class Mode(Node):
     def __init__(self):
         super().__init__('Mode_node')
-        self.pub = self.create_publisher(String, '/mode', 10)   # publishes a string which is the mode
+        self.pub = self.create_publisher(String, 'mode', 10)   # publishes a string which is the mode
     def mode_select(self):
         self.get_logger().info('Type: A for auto, T for teleop, E for estop')    # prints txt
         while rclpy.ok():
