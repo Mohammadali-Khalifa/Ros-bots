@@ -11,7 +11,7 @@ setup(
         ['package.xml']),
        # install launch file(s)
        ('share/' + package_name + '/launch', [
-           'launch/Final.py',
+           'launch/Final_launch.py',
        ]),
    ],
    install_requires=['setuptools'],
