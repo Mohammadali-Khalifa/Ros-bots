@@ -29,7 +29,7 @@ class PickupDeliveryFSM(Node):
         self.declare_parameter('max_ang', 1.0)
 
         # mode behavior
-        self.declare_parameter('force_autonomous', True)
+        self.declare_parameter('force_autonomous', False)
 
         # gripper behavior
         self.declare_parameter('use_gripper', True)
@@ -41,10 +41,11 @@ class PickupDeliveryFSM(Node):
         # Topics
         self.meas_sub = self.create_subscription(Int32MultiArray, 'marker_measurements', self.meas_cb, 10)
 
-        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel_auto', 10)
-        self.mode_pub = self.create_publisher(String, 'mode_request', 10)
+        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.target_pub = self.create_publisher(String, 'target_request', 10)   # tell detector pickup/dropoff
         self.grip_pub = self.create_publisher(String, 'gripper_cmd', 10)
+        self.mode = 'AUTONOMOUS'
+        self.mode_sub = self.create_subscription(String, 'mode_request', self.mode_cb, 10)
 
         self.last_meas = (-1, -1, 0)  # cx, w, color_id
         self.state = 'SEARCH_PICKUP'
@@ -58,6 +59,15 @@ class PickupDeliveryFSM(Node):
         if len(msg.data) >= 3:
             self.last_meas = (int(msg.data[0]), int(msg.data[1]), int(msg.data[2]))
 
+    def mode_cb(self, msg: String):
+        m = msg.data.strip().upper()
+        if m in ('AUTONOMOUS', 'TELEOP', 'STOP'):
+            if m != self.mode:
+                self.get_logger().info(f'Mode: {self.mode} -> {m}')
+            self.mode = m
+            if m in ('TELEOP', 'STOP'):
+                self.stop()
+
     def set_state(self, s: str):
         if s != self.state:
             self.get_logger().info(f'{self.state} -> {s}')
@@ -66,12 +76,6 @@ class PickupDeliveryFSM(Node):
 
     def elapsed(self) -> float:
         return time.time() - self.state_ts
-
-    def publish_mode(self):
-        if bool(self.get_parameter('force_autonomous').value):
-            m = String()
-            m.data = 'AUTONOMOUS'
-            self.mode_pub.publish(m)
 
     def stop(self):
         t = Twist()
@@ -85,11 +89,16 @@ class PickupDeliveryFSM(Node):
         self.target_pub.publish(msg)
 
     def gripper(self, cmd: str):
-        if not bool(self.get_parameter('use_gripper').value):
+        if not self.param_true('use_gripper'):
             return
         msg = String()
         msg.data = cmd
         self.grip_pub.publish(msg)
+
+    def param_true(self, name: str) -> bool:
+        val = self.get_parameter(name).value
+        return str(val).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+
 
     def approach_control(self, cx: int, w: int):
         img_w = int(self.get_parameter('image_width').value)
@@ -137,7 +146,11 @@ class PickupDeliveryFSM(Node):
         return close_enough
 
     def tick(self):
-        self.publish_mode()
+        if self.mode != 'AUTONOMOUS':
+            if self.mode == 'STOP':
+                self.stop()
+            return
+
 
         pickup_color = self.get_parameter('pickup_color').value.strip().lower()
         dropoff_color = self.get_parameter('dropoff_color').value.strip().lower()
@@ -169,7 +182,7 @@ class PickupDeliveryFSM(Node):
 
         elif self.state == 'GRAB':
             self.target_request('pickup')
-            use_lift = bool(self.get_parameter('use_lift').value)
+            use_lift = self.param_true('use_lift')
             pre_open = float(self.get_parameter('pre_open_seconds').value)
             action_s = float(self.get_parameter('action_seconds').value)
             lift_s = float(self.get_parameter('lift_action_seconds').value)
@@ -216,7 +229,7 @@ class PickupDeliveryFSM(Node):
 
         elif self.state == 'RELEASE':
             self.target_request('dropoff')
-            use_lift = bool(self.get_parameter('use_lift').value)
+            use_lift = self.param_true('use_lift')
             action_s = float(self.get_parameter('action_seconds').value)
             lift_s = float(self.get_parameter('lift_action_seconds').value)
 
@@ -239,6 +252,7 @@ class PickupDeliveryFSM(Node):
         elif self.state == 'DONE':
             self.target_request('')
             self.stop()
+            self.set_state('SEARCH_PICKUP')
 
         else:
             self.stop()
