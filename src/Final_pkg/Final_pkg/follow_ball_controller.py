@@ -29,7 +29,7 @@ class BallFollow(Node):
         self.object_turn_first_threshold = 0.20
         
         self.create_subscription(Int32MultiArray, 'image_info', self.image_callback, 10)  #subscibes to image_info to get the ball info
-        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
+        self.cmd_pub = self.create_publisher(Twist, 'auto/cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
 
         self.target_pub = self.create_publisher(String, 'target_request', 10)
         self.grip_sub = self.create_subscription(String, 'gripper_cmd', self.gripper_cb, 10)
