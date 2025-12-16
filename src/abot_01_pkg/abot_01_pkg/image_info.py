@@ -12,6 +12,7 @@ class ImageInfo(Node):
         self.bridge = CvBridge()  # converts ROS images to OpenCV
         self.sub = self.create_subscription(Image, 'image_filtered', self.image_cb, 10)
         self.pub = self.create_publisher(Int32MultiArray, 'image_info', 10)
+    #lines 12 to 14 subscribes to the filtered image and creates a publisher for image info
     def image_cb(self, msg: Image):
         mask = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -26,6 +27,7 @@ class ImageInfo(Node):
         out = Int32MultiArray()
         out.data = [int(center_px), int(width_px)]
         self.pub.publish(out)
+    #lines 16 to 30 processes the image to find the largest contour and computes its center and width, then publishes this info
 def main(args=None):
     rclpy.init(args=args)
     node = ImageInfo()
