@@ -36,8 +36,10 @@ class FSMCode(Node):
             self.get_logger().info('Mode -> ESTOP')
         else:
             self.get_logger().warn(f'Unknown mode key: "{msg.data}"')
+    # lines 26 to 38 handle mode switching based on received messages
     def estop_cb(self, msg: Bool):
         self.estop_active = msg.data
+    # lines 40 to 42 handle emergency stop messages
     def update(self):
         cmd = Twist() 
         if self.estop_active or self.current_mode == 'ESTOP':
@@ -47,6 +49,7 @@ class FSMCode(Node):
         elif self.current_mode == 'AUTO':
             cmd = self.auto_cmd
         self.cmd_pub.publish(cmd)
+    # lines 44 to 54 decide which command to publish based on the current mode and estop status
 def main(args=None):
     rclpy.init(args=args)
     node = FSMCode()
