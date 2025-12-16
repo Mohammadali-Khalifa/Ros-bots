@@ -23,6 +23,7 @@ class FSMCode(Node):
         self.teleop_cmd = msg
     def auto_cb(self, msg: Twist):
         self.auto_cmd = msg
+    #lines 18 to 22 stores the teleop and auto commands
     def mode_cb(self, msg: String):
         key = msg.data.strip().lower()
         if key == 't':
