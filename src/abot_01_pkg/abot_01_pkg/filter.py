@@ -14,7 +14,7 @@ class ColorFilter(Node):
         bgr = self.bridge.imgmsg_to_cv2(image_message, desired_encoding='bgr8')
         bgr = cv2.rotate(bgr, cv2.ROTATE_180)
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, (95, 120, 60), (130, 255, 255))
+        mask = cv2.inRange(hsv, (140, 40, 40), (180,255,255))
         kernel = np.ones((7,7), np.uint8)
         mask = cv2.erode(mask, kernel, iterations=1)
         mask = cv2.dilate(mask, kernel, iterations=2)
