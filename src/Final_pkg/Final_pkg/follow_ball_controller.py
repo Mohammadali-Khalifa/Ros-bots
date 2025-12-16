@@ -19,12 +19,21 @@ class BallFollow(Node):
         self.min_turn_speed = 0.50            # maintains steady speeds for turning
         self.min_forward_speed = 0.30            #mianitans steady speeds for going forwards and back (reduces the jerking)
         self.turn_first_threshold = 0.25         #how much the bot should be cenetred beofore it goes stright
+
+        self.object_target_width = 260.0          #width of the ball when it is ~15cm away (calibrate if needed)
+        self.object_width_deadband_px = 20.0
+        self.object_min_forward_speed = 0.08
+        self.object_linear_gain = 0.002
+        self.object_min_turn_speed = 0.15
+        self.object_center_deadband = 0.10
+        self.object_turn_first_threshold = 0.20
         
         self.create_subscription(Int32MultiArray, 'image_info', self.image_callback, 10)  #subscibes to image_info to get the ball info
         self.cmd_pub = self.create_publisher(Twist, 'auto/cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
 
         self.target_pub = self.create_publisher(String, 'target_request', 10)
         self.grip_sub = self.create_subscription(String, 'gripper_cmd', self.gripper_cb, 10)
+        self.grip_pub = self.create_publisher(String, 'gripper_cmd', 10)
 
         self.pickup_color = 'blue'
         self.dropoff_color = 'pink'
@@ -32,8 +41,84 @@ class BallFollow(Node):
         self.state = 'SEARCH_PICKUP'
         self.last_gripper_cmd = ''
 
+        self._grip_seq = ''
+        self._grip_step = 0
+        self._grip_step_t = self.get_clock().now()
+        self._grip_init_done = False
+        self.grip_timer = self.create_timer(0.05, self._gripper_update)
+
     def gripper_cb(self, msg: String):
         self.last_gripper_cmd = msg.data.strip().lower()
+
+    def _gripper_send(self, cmd: str):
+        self.grip_pub.publish(String(data=cmd))
+        self.last_gripper_cmd = cmd.strip().lower()
+
+    def _gripper_start(self, seq: str):
+        if self._grip_seq != seq:
+            self._grip_seq = seq
+            self._grip_step = 0
+            self._grip_step_t = self.get_clock().now()
+
+    def _gripper_update(self):
+        now = self.get_clock().now()
+
+        if not self._grip_init_done:
+            if (now - self._grip_step_t).nanoseconds < int(0.5 * 1e9):
+                return
+            if self._grip_step == 0:
+                self._gripper_send('open')
+                self._grip_step_t = now
+                self._grip_step = 1
+                return
+            if self._grip_step == 1:
+                self._gripper_send('up')
+                self._grip_step_t = now
+                self._grip_step = 2
+                return
+            self._grip_init_done = True
+            self._grip_seq = ''
+            self._grip_step = 0
+            return
+
+        if self._grip_seq == 'GRAB':
+            if (now - self._grip_step_t).nanoseconds < int(0.7 * 1e9):
+                return
+            if self._grip_step == 0:
+                self._gripper_send('down')
+                self._grip_step_t = now
+                self._grip_step = 1
+                return
+            if self._grip_step == 1:
+                self._gripper_send('close')
+                self._grip_step_t = now
+                self._grip_step = 2
+                return
+            if self._grip_step == 2:
+                self._gripper_send('up')
+                self._grip_step_t = now
+                self._grip_step = 3
+                return
+            self._grip_seq = ''
+            self._grip_step = 0
+            return
+
+        if self._grip_seq == 'RELEASE':
+            if (now - self._grip_step_t).nanoseconds < int(0.7 * 1e9):
+                return
+            if self._grip_step == 0:
+                self._gripper_send('down')
+                self._grip_step_t = now
+                self._grip_step = 1
+                return
+            if self._grip_step == 1:
+                self._gripper_send('open')
+                self._grip_step_t = now
+                self._grip_step = 2
+                return
+            self._grip_seq = ''
+            self._grip_step = 0
+            return
 
     def _publish_target(self, phase: str):
         self.target_pub.publish(String(data=phase))
@@ -45,6 +130,11 @@ class BallFollow(Node):
     def _spin(self):
         cmd = Twist()
         cmd.angular.z = self.min_turn_speed
+        self.cmd_pub.publish(cmd)
+
+    def _spin_slow(self):
+        cmd = Twist()
+        cmd.angular.z = self.object_min_turn_speed
         self.cmd_pub.publish(cmd)
 
     def image_callback(self, msg):
@@ -68,7 +158,7 @@ class BallFollow(Node):
                 return
             if self.state == 'SEARCH_OBJECT':
                 self._publish_target('object')
-                self._spin()
+                self._spin_slow()
                 return
             if self.state == 'SEARCH_DROPOFF':
                 self._publish_target('dropoff')
@@ -129,16 +219,51 @@ class BallFollow(Node):
             if self.state == 'SEARCH_OBJECT':
                 self._publish_target('object')
                 if seen_shape == 'round':
-                    self.state = 'WAIT_GRAB'
-                    self._stop()
+                    self.state = 'APPROACH_OBJECT'
                 else:
-                    self._spin()
+                    self._spin_slow()
+                return
+
+            if self.state == 'APPROACH_OBJECT':
+                self._publish_target('object')
+                if seen_shape != 'round':
+                    self.state = 'SEARCH_OBJECT'
+                    self._spin_slow()
+                    return
+
+                obj_center_error = center_error
+
+                if abs(obj_center_error) > self.object_center_deadband:
+                    angular_speed = -self.angular_gain * obj_center_error
+                    if angular_speed > 0.0:
+                        angular_speed = max(angular_speed, self.object_min_turn_speed)
+                    else:
+                        angular_speed = min(angular_speed, -self.object_min_turn_speed)
+                    cmd.angular.z = angular_speed
+
+                width_error = self.object_target_width - width_px
+                if abs(width_error) > self.object_width_deadband_px:
+                    linear_speed = self.object_linear_gain * width_error
+                    if abs(obj_center_error) > self.object_turn_first_threshold:
+                        linear_speed = 0.0
+                    if 0.0 < linear_speed < self.object_min_forward_speed:
+                        linear_speed = self.object_min_forward_speed
+                    cmd.linear.x = linear_speed
+
+                self.cmd_pub.publish(cmd)
+                close_enough_obj = (abs(obj_center_error) <= self.object_center_deadband) and (
+                    abs(self.object_target_width - width_px) <= self.object_width_deadband_px
+                )
+                if close_enough_obj:
+                    self._stop()
+                    self.state = 'WAIT_GRAB'
                 return
 
             if self.state == 'WAIT_GRAB':
                 self._publish_target('object')
                 self._stop()
-                if self.last_gripper_cmd == 'close':
+                self._gripper_start('GRAB')
+                if self._grip_seq == '':
                     self.state = 'SEARCH_DROPOFF'
                 return
 
@@ -183,7 +308,11 @@ class BallFollow(Node):
             if self.state == 'WAIT_RELEASE':
                 self._publish_target('dropoff')
                 self._stop()
-                if self.last_gripper_cmd == 'open':
+                self._gripper_start('RELEASE')
+                if self._grip_seq == '':
+                    self._grip_init_done = False
+                    self._grip_step = 0
+                    self._grip_step_t = self.get_clock().now()
                     self.state = 'SEARCH_PICKUP'
                 return
 
