@@ -26,9 +26,13 @@ class ImageInfo(Node):
         width_px = 0
         if contours:
             largest = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(largest)
-            center_px = x + (w // 2)   # x-center of bounding box
-            width_px = w               # width of bounding box
+            if cv2.contourArea(largest) > 500:
+                x, y, w, h = cv2.boundingRect(largest)
+                center_px = x + (w // 2)   # x-center of bounding box
+                width_px = w               # width of bounding box
+            else:
+                center_px = -1
+                width_px = 0             # width of bounding box
         # publish the info
         out = Int32MultiArray()
         out.data = [int(center_px), int(width_px), int(self.last_color_id), int(self.last_shape_id)]
