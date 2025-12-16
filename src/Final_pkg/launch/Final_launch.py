@@ -37,6 +37,13 @@ def generate_launch_description():
       ),
        Node(
            package='Final_pkg',
+           executable='gripper_serial',
+           name='gripper_serial',
+           namespace=robot_ns,
+           output='screen'
+       ),
+       Node(
+           package='Final_pkg',
            executable='fsm',
            name='fsm',
            namespace=robot_ns,
