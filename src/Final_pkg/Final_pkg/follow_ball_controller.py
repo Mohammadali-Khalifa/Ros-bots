@@ -29,7 +29,7 @@ class BallFollow(Node):
         self.object_turn_first_threshold = 0.20
         
         self.create_subscription(Int32MultiArray, 'image_info', self.image_callback, 10)  #subscibes to image_info to get the ball info
-        self.cmd_pub = self.create_publisher(Twist, 'auto/cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
+        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10) #publishes to auto/cmd_vel to move the motors
 
         self.target_pub = self.create_publisher(String, 'target_request', 10)
         self.grip_sub = self.create_subscription(String, 'gripper_cmd', self.gripper_cb, 10)
@@ -46,6 +46,8 @@ class BallFollow(Node):
         self._grip_step_t = self.get_clock().now()
         self._grip_init_done = False
         self.grip_timer = self.create_timer(0.05, self._gripper_update)
+        self._grab_started = False
+        self._release_started = False
 
     def gripper_cb(self, msg: String):
         self.last_gripper_cmd = msg.data.strip().lower()
@@ -218,7 +220,7 @@ class BallFollow(Node):
 
             if self.state == 'SEARCH_OBJECT':
                 self._publish_target('object')
-                if seen_shape == 'round':
+                if seen_shape == 'round' and seen_color == self.pickup_color:
                     self.state = 'APPROACH_OBJECT'
                 else:
                     self._spin_slow()
@@ -226,7 +228,7 @@ class BallFollow(Node):
 
             if self.state == 'APPROACH_OBJECT':
                 self._publish_target('object')
-                if seen_shape != 'round':
+                if seen_shape != 'round' or seen_color != self.pickup_color:
                     self.state = 'SEARCH_OBJECT'
                     self._spin_slow()
                     return
@@ -262,8 +264,11 @@ class BallFollow(Node):
             if self.state == 'WAIT_GRAB':
                 self._publish_target('object')
                 self._stop()
-                self._gripper_start('GRAB')
-                if self._grip_seq == '':
+                if not self._grab_started:
+                    self._gripper_start('GRAB')
+                    self._grab_started = True
+                if self._grab_started and self._grip_seq == '':
+                    self._grab_started = False
                     self.state = 'SEARCH_DROPOFF'
                 return
 
@@ -304,12 +309,15 @@ class BallFollow(Node):
                     self._stop()
                     self.state = 'WAIT_RELEASE'
                 return
-
+            
             if self.state == 'WAIT_RELEASE':
                 self._publish_target('dropoff')
                 self._stop()
-                self._gripper_start('RELEASE')
-                if self._grip_seq == '':
+                if not self._release_started:
+                    self._gripper_start('RELEASE')
+                    self._release_started = True
+                if self._release_started and self._grip_seq == '':
+                    self._release_started = False
                     self._grip_init_done = False
                     self._grip_step = 0
                     self._grip_step_t = self.get_clock().now()
