@@ -28,7 +28,7 @@ class ColorFilter(Node):
 
     def _mask_for_color(self, hsv, cname):
         if cname == 'blue':
-            return cv2.inRange(hsv, (95, 80, 40), (130, 255, 255))
+            return cv2.inRange(hsv, (41, 80, 108), (126, 255, 255))
         if cname == 'pink':
             return cv2.inRange(hsv, (140, 60, 60), (179, 255, 255))
         if cname == 'green':
