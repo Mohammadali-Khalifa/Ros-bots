@@ -43,18 +43,19 @@ class GripperKeyboardNode(Node):
         return ch
 
     def run(self):
-        #mapping of gripper commands and publishing
-        mapping = {'o': 'open', 'c': 'close', 'u': 'up', 'd': 'down', 's': 'stop'}
+        mapping = {'o': 'o', 'c': 'c', 'u': 'u', 'd': 'd', 's': 's'}
         while rclpy.ok():
             k = self._get_key()
             if not k:
                 continue
             k = k.lower()
             if k == 'q':
+                self.pub.publish(String(data='q'))
                 break
             if k in mapping:
                 self.pub.publish(String(data=mapping[k]))
                 self.get_logger().info(f'gripper_cmd -> {mapping[k]}')
+
 
 
 def main(args=None):
