@@ -9,7 +9,7 @@ class GripperSerial(Node):
     def __init__(self):
         super().__init__('gripper_serial')
         
-        self.port = '/dev/ttyACM0' #port
+        self.port = '/dev/ttyACM1' #port
         self.baud = 115200 #baud rate
 
         #attempt to open serial connection
