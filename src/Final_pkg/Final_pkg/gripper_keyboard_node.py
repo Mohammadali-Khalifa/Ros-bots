@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
+#import control libraries
 try:
     import termios
     import tty
@@ -10,7 +11,7 @@ except ImportError:
     termios = None
     tty = None
 
-
+#message displayed for user
 HELP = """
 Gripper keyboard control:
   o = open
@@ -21,14 +22,15 @@ Gripper keyboard control:
   q = quit
 """
 
-
+#node for controlling gripper using key presses
 class GripperKeyboardNode(Node):
     def __init__(self):
         super().__init__('gripper_keyboard_node')
-        self.pub = self.create_publisher(String, 'gripper_cmd', 10)
-        self.get_logger().info(HELP.strip())
+        self.pub = self.create_publisher(String, 'gripper_cmd', 10) #publish gripper command string
+        self.get_logger().info(HELP.strip()) #print instructions
 
     def _get_key(self):
+        #read kepress from terminal
         if termios is None or tty is None:
             return None
         fd = sys.stdin.fileno()
@@ -41,6 +43,7 @@ class GripperKeyboardNode(Node):
         return ch
 
     def run(self):
+        #mapping of gripper commands and publishing
         mapping = {'o': 'open', 'c': 'close', 'u': 'up', 'd': 'down', 's': 'stop'}
         while rclpy.ok():
             k = self._get_key()
