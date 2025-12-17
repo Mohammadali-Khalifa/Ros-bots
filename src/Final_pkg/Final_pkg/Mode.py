@@ -3,17 +3,19 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from std_msgs.msg import Bool
 
+#mode selection node
+
 class Mode(Node):
     def __init__(self):
         super().__init__('Mode_node')
-        self.pub = self.create_publisher(String, 'mode', 10)   # publishes a string which is the mode
+        self.pub = self.create_publisher(String, 'mode', 10)   # publishes a string which is the mode to the FSM
     def mode_select(self):
-        self.get_logger().info('Type: A for auto, T for teleop, E for estop')    # prints txt
+        self.get_logger().info('Type: A for auto, T for teleop, E for estop')    # prints txt to prompt for mode selection
         while rclpy.ok():
             user_message = input().strip().lower()  # saves user input into user_message
-            if user_message == 'a':  # auto
+            if user_message == 'a':  # auto mode
                 self.pub.publish(String(data='a'))
-            elif user_message == 't':  # teleop
+            elif user_message == 't':  # teleop mode
                 self.pub.publish(String(data='t'))
             elif user_message == 'e':  # estop
                 self.pub.publish(String(data='e'))
