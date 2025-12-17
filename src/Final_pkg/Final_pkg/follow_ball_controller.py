@@ -9,12 +9,12 @@ class BallFollow(Node):
         super().__init__('ball_follow_simple')
         self.image_width = 640.0                  # camera image in pixels
         self.target_width = 200.0                   #width of the ball
-        self.angular_gain = 1.6                # how much to turn left or right to see the ball
+        self.angular_gain = 1.4                # how much to turn left or right to see the ball
         self.linear_gain = 0.004                # how much to go forward to the ball
         self.center_deadband = 0.15            # for when the ball is centered
         self.width_deadband_px = 30.0           #this is for moving forward and back
         self.min_turn_speed = 0.50            # maintains steady speeds for turning
-        self.min_forward_speed = 2.0            #mianitans steady speeds for going forwards and back (reduces the jerking)
+        self.min_forward_speed = 1.67            #mianitans steady speeds for going forwards and back (reduces the jerking)
         self.turn_first_threshold = 0.25         #how much the bot should be cenetred beofore it goes stright
         
         self.create_subscription(Int32MultiArray, 'image_info', self.image_callback, 10)  #subscibes to image_info to get the ball info
